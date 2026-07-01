@@ -36,8 +36,8 @@ local effectAdjustments =
         effectId = xi.effect.CONSPIRATOR,
         multiply =
         {
-            power = 0.75, -- 25% reduction
-            subpower = 0.75, -- 25% reduction
+            power = 0.50, -- 50% reduction
+            subpower = 0.50, -- 50% reduction
         },
     },
     dodge =
@@ -70,8 +70,8 @@ local effectAdjustments =
         effectId = xi.effect.HAGAKURE,
         multiply =
         {
-            power = 0.5, -- 50% reduction
-            subpower = 0.5, -- 50% reduction
+            power = 0.25, -- 75% reduction
+            subpower = 0.25, --75% reduction
         },
     },
     hamanoha =
@@ -122,7 +122,7 @@ local effectAdjustments =
         effectId = xi.effect.MARCATO,
         add =
         {
-            power = -25, -- Changed from 1.5x to 1.25x
+            power = -30, -- Changed from 1.5x to 1.20x
         },
     },
 }
