@@ -6,10 +6,10 @@ Applies era stat bonus scaling up to level 37 and custom formula from 37 and abo
 
 This patch implements era-accurate stat-to-combat scaling for players based on level progression.
 ---
-diff --git a/src/map/entities/battleentity.cpp b/src/map/entities/battleentity.cpp
+diff --git a/src/map/entities/battle_entity.cpp b/src/map/entities/battle_entity.cpp
 index 8dc0223259..44e4e8c24a 100644
---- a/src/map/entities/battleentity.cpp
-+++ b/src/map/entities/battleentity.cpp
+--- a/src/map/entities/battle_entity.cpp
++++ b/src/map/entities/battle_entity.cpp
 @@ -55,6 +55,20 @@
  #include "utils/zoneutils.h"
  #include "weapon_skill.h"

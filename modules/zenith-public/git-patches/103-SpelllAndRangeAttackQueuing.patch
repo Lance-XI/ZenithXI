@@ -2,9 +2,9 @@ diff --git a/src/map/ai/ai_container.cpp b/src/map/ai/ai_container.cpp
 index 555f6c0bc0..f98dbaf4f3 100644
 --- a/src/map/ai/ai_container.cpp
 +++ b/src/map/ai/ai_container.cpp
-@@ -462,6 +462,29 @@ auto CAIContainer::Tick(timer::time_point tick) -> Task<void>
-             break;
-         }
+@@ -501,6 +501,29 @@ auto CAIContainer::Tick(timer::time_point tick) -> Task<void>
+     {
+         Inactive(0ms, false);
      }
 +    auto* PChar = dynamic_cast<CCharEntity*>(PEntity);
 +    if (
@@ -57,7 +57,7 @@ index 3ddd7b433d..6d45afd7e6 100644
  #include "ai/states/inactive_state.h"
 +#include "ai/states/magic_state.h"
 +#include "ai/states/range_state.h"
- #include "entities/charentity.h"
+ #include "entities/char_entity.h"
  #include "items/item_weapon.h"
  #include "latent_effect_container.h"
 @@ -50,6 +52,26 @@ auto CPlayerController::Tick(timer::time_point /*tick*/) -> Task<void>

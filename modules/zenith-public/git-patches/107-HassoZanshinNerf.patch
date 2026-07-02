@@ -20,10 +20,10 @@ index f590def4f8..d941d9d604 100644
          }
      }
  
-diff --git a/src/map/entities/battleentity.cpp b/src/map/entities/battleentity.cpp
+diff --git a/src/map/entities/battle_entity.cpp b/src/map/entities/battle_entity.cpp
 index adaa0b5d57..dfdb451a15 100644
---- a/src/map/entities/battleentity.cpp
-+++ b/src/map/entities/battleentity.cpp
+--- a/src/map/entities/battle_entity.cpp
++++ b/src/map/entities/battle_entity.cpp
 @@ -3808,12 +3808,12 @@ bool CBattleEntity::OnAttack(CAttackState& state, action_t& action)
              uint16 zanshinChance = this->getMod(Mod::ZANSHIN) + battleutils::GetMeritValue(this, MERIT_ZASHIN_ATTACK_RATE);
              zanshinChance        = std::clamp<uint16>(zanshinChance, 0, 100);

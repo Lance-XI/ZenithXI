@@ -8,11 +8,11 @@ diff --git a/src/map/utils/charutils.cpp b/src/map/utils/charutils.cpp
 index 892a89d968..f6d310a953 100644
 --- a/src/map/utils/charutils.cpp
 +++ b/src/map/utils/charutils.cpp
-@@ -82,6 +82,7 @@
- #include "entities/charentity.h"
- #include "entities/mobentity.h"
- #include "entities/petentity.h"
-+#include "entities/trustentity.h"
+@@ -87,6 +87,7 @@
+ #include "entities/char_entity.h"
+ #include "entities/mob_entity.h"
+ #include "entities/pet_entity.h"
++#include "entities/trust_entity.h"
  
  #include "battleutils.h"
  #include "blueutils.h"

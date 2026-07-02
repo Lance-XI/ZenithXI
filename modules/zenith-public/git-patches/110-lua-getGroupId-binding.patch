@@ -1,7 +1,7 @@
-diff --git a/src/map/entities/mobentity.cpp b/src/map/entities/mobentity.cpp
+diff --git a/src/map/entities/mob_entity.cpp b/src/map/entities/mob_entity.cpp
 index 26c219fcb4..fcb17ce165 100644
---- a/src/map/entities/mobentity.cpp
-+++ b/src/map/entities/mobentity.cpp
+--- a/src/map/entities/mob_entity.cpp
++++ b/src/map/entities/mob_entity.cpp
 @@ -204,6 +204,11 @@ uint32 CMobEntity::getEntityFlags() const
      return m_flags;
  }
@@ -14,10 +14,10 @@ index 26c219fcb4..fcb17ce165 100644
  void CMobEntity::setEntityFlags(uint32 EntityFlags)
  {
      m_flags = EntityFlags;
-diff --git a/src/map/entities/mobentity.h b/src/map/entities/mobentity.h
+diff --git a/src/map/entities/mob_entity.h b/src/map/entities/mob_entity.h
 index 3d48aafe78..d5109656b7 100644
---- a/src/map/entities/mobentity.h
-+++ b/src/map/entities/mobentity.h
+--- a/src/map/entities/mob_entity.h
++++ b/src/map/entities/mob_entity.h
 @@ -121,6 +121,7 @@ public:
  
      uint32 getEntityFlags() const;             // Returns the current value in m_flags
@@ -30,14 +30,14 @@ index 3d48aafe78..d5109656b7 100644
  
      uint32 m_flags;       // includes the CFH flag and whether the HP bar should be shown or not (e.g. Yilgeban doesnt)
      uint8  m_name_prefix; // The ding bats VS Ding bats
-+    uint32 m_GroupID;     // mobgroup ID within zone
++    uint32 m_GroupID = 0; // mobgroup ID within zone
  
      uint8 m_unk0; // possibly campaign related (entity 0x24)
      uint8 m_unk1; // (entity_update 0x25)
-diff --git a/src/map/lua/lua_baseentity.cpp b/src/map/lua/lua_baseentity.cpp
+diff --git a/src/map/lua/lua_base_entity.cpp b/src/map/lua/lua_base_entity.cpp
 index f8017d119f..f78f43ce29 100644
---- a/src/map/lua/lua_baseentity.cpp
-+++ b/src/map/lua/lua_baseentity.cpp
+--- a/src/map/lua/lua_base_entity.cpp
++++ b/src/map/lua/lua_base_entity.cpp
 @@ -19306,6 +19306,24 @@ uint32 CLuaBaseEntity::getPool()
      return 0;
  }
@@ -71,10 +71,10 @@ index f8017d119f..f78f43ce29 100644
      SOL_REGISTER("getDropID", CLuaBaseEntity::getDropID);
      SOL_REGISTER("setDropID", CLuaBaseEntity::setDropID);
      SOL_REGISTER("addTreasure", CLuaBaseEntity::addTreasure);
-diff --git a/src/map/lua/lua_baseentity.h b/src/map/lua/lua_baseentity.h
+diff --git a/src/map/lua/lua_base_entity.h b/src/map/lua/lua_base_entity.h
 index b698fc5527..4e36a34687 100644
---- a/src/map/lua/lua_baseentity.h
-+++ b/src/map/lua/lua_baseentity.h
+--- a/src/map/lua/lua_base_entity.h
++++ b/src/map/lua/lua_base_entity.h
 @@ -940,6 +940,7 @@ public:
      void tryHitInterrupt(CLuaBaseEntity* attacker);
  

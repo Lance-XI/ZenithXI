@@ -28,8 +28,8 @@
  * Supported types: OUTPOST_*, RUNIC_PORTAL, PAST_MAW, CAMPAIGN_*
  ************************************************************************/
 #include "common/lua.h"
-#include "map/entities/charentity.h"
-#include "map/lua/lua_baseentity.h"
+#include "map/entities/char_entity.h"
+#include "map/lua/lua_base_entity.h"
 #include "map/utils/charutils.h"
 #include "map/utils/moduleutils.h"
 #include "map/zone.h"
