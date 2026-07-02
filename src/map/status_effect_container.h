@@ -23,7 +23,9 @@
 
 #include "common/cbasetypes.h"
 
+#include <memory>
 #include <set>
+#include <utility>
 
 #include "status_effect.h"
 
@@ -41,15 +43,24 @@ enum class EffectNotice : uint8
     Silent      = 1, // Suppress the message entirely
 };
 
-class CStatusEffectContainer
+class CStatusEffectContainer final
 {
 public:
-    uint64 m_Flags{ 0 };        // Bits of overflow of bytes m_statusicons (two battles for each effect)
-    uint8  m_StatusIcons[32]{}; // Icons status effects
+    CStatusEffectContainer(CBattleEntity* PEntity);
+    ~CStatusEffectContainer();
+
+    template <typename T = CStatusEffect, typename... Args>
+    bool AddStatusEffect(Args&&... args);
+
+    template <typename T = CStatusEffect, typename... Args>
+    bool AddStatusEffectSilent(Args&&... args);
+
+    template <typename F, typename... Args>
+    void ForEachEffect(F func, Args&&... args);
 
     bool ApplyBardEffect(CStatusEffect* PStatusEffect, uint8 maxSongs);
     bool CanGainStatusEffect(CStatusEffect* PStatusEffect); // returns true if the status effect will take effect
-    bool AddStatusEffect(CStatusEffect* StatusEffect, EffectNotice = EffectNotice::ShowMessage);
+
     auto DelStatusEffect(xi::StatusEffect StatusID) -> bool;
     auto DelStatusEffectSilent(xi::StatusEffect StatusID) -> bool;
     auto DelStatusEffect(xi::StatusEffect StatusID, uint16 SubID) -> bool;
@@ -59,19 +70,19 @@ public:
     void DelStatusEffectsByType(uint16 Type);
     auto DelStatusEffectByTier(xi::StatusEffect StatusID, uint16 power) -> bool;
     void KillAllStatusEffect();
-    void ApplyStateAlteringEffects(CStatusEffect* StatusEffect);
+    void HandleEffectGainSideEffects(CStatusEffect* StatusEffect);
 
     auto HasStatusEffect(xi::StatusEffect StatusID) -> bool;               // We check the presence of the effect
     auto HasStatusEffect(xi::StatusEffect StatusID, uint16 SubID) -> bool; // Check the presence of an effect with a unique Subid
     auto HasStatusEffect(std::initializer_list<xi::StatusEffect>) -> bool;
     auto HasStatusEffectByFlag(xi::StatusEffectFlag flag) -> bool;
 
-    auto  EraseStatusEffect() -> xi::StatusEffect;                                             // We delete the first negative effect
-    auto  HealingWaltz() -> xi::StatusEffect;                                                  // dancers healing waltz
-    uint8 EraseAllStatusEffect();                                                              // erases all status effects
-    auto  DispelStatusEffect(xi::StatusEffectFlag flag) -> xi::StatusEffect;                   // We delete the first positive effect
-    auto  DispelAllStatusEffect(xi::StatusEffectFlag flag) -> uint8;                           // dispels all status effects
-    auto  StealStatusEffect(xi::StatusEffectFlag flag, EffectNotice notice) -> CStatusEffect*; // dispels one effect and returns it
+    auto  EraseStatusEffect() -> xi::StatusEffect;                                                             // We delete the first negative effect
+    auto  HealingWaltz() -> xi::StatusEffect;                                                                  // dancers healing waltz
+    uint8 EraseAllStatusEffect();                                                                              // erases all status effects
+    auto  DispelStatusEffect(xi::StatusEffectFlag flag) -> xi::StatusEffect;                                   // We delete the first positive effect
+    auto  DispelAllStatusEffect(xi::StatusEffectFlag flag) -> uint8;                                           // dispels all status effects
+    auto  StealStatusEffect(xi::StatusEffectFlag flag, EffectNotice notice) -> std::unique_ptr<CStatusEffect>; // dispels one effect and hands ownership to the caller
 
     auto GetStatusEffect(xi::StatusEffect StatusID) -> CStatusEffect*;
     auto GetStatusEffect(xi::StatusEffect StatusID, uint32 SubID) -> CStatusEffect*;
@@ -97,11 +108,8 @@ public:
     auto  GetEffectsCountWithFlag(xi::StatusEffectFlag flag) -> uint8; // We get the number of effects with the specified flag
     uint8 GetLowestFreeSlot();                                         // returns the lowest free slot for songs/rolls
 
-    auto ApplyCorsairEffect(CStatusEffect* PStatusEffect, uint8 maxRolls, uint8 bustDuration) -> bool;
     bool CheckForElevenRoll();
     bool HasBustEffect(uint16 id);
-    bool HasCorsairEffect(uint32 charid);
-    void Fold(uint32 charid);
 
     uint8 GetActiveManeuverCount();
     void  RemoveOldestManeuver();
@@ -123,20 +131,16 @@ public:
     uint16 GetConfrontationEffect();                        // gets confrontation number (bcnm, confrontation, campaign, reive mark)
     void   CopyConfrontationEffect(CBattleEntity* PEntity); // copies confrontation status (pet summoning, etc)
 
-    template <typename F, typename... Args>
-    void ForEachEffect(F func, Args&&... args)
-    {
-        for (auto&& PEffect : m_StatusEffectSet)
-        {
-            func(PEffect, std::forward<Args>(args)...);
-        }
-    }
-
-    CStatusEffectContainer(CBattleEntity* PEntity);
-    ~CStatusEffectContainer();
+    [[nodiscard]] auto statusIcons() const -> const uint8*;
+    [[nodiscard]] auto statusBits() const -> const uint64&;
 
 private:
     CBattleEntity* m_POwner = nullptr;
+
+    uint64 m_Flags{ 0 };        // Bits of overflow of bytes m_statusicons (two battles for each effect)
+    uint8  m_StatusIcons[32]{}; // Icons status effects
+
+    bool AddStatusEffect(std::unique_ptr<CStatusEffect> StatusEffect, EffectNotice = EffectNotice::ShowMessage);
 
     // void ReplaceStatusEffect(xi::StatusEffect effect); //this needs to be implemented
     void RemoveStatusEffect(CStatusEffect* PStatusEffect, EffectNotice notice = EffectNotice::ShowMessage); // We remove the effect by its number in the container
@@ -146,14 +150,49 @@ private:
 
     void OverwriteStatusEffect(CStatusEffect* StatusEffect);
 
-    std::multiset<CStatusEffect*, bool (*)(CStatusEffect* AStatus, CStatusEffect* BStatus)> m_StatusEffectSet{};
+    // The container owns the lifetime of its status effects. External access is handed out as
+    // observing CStatusEffect* (nullable lookups) or CStatusEffect& (iteration via ForEachEffect).
+    std::multiset<std::unique_ptr<CStatusEffect>, bool (*)(const std::unique_ptr<CStatusEffect>&, const std::unique_ptr<CStatusEffect>&)> m_StatusEffectSet;
 };
 
-/************************************************************************
- *                                                                       *
- *                                                                       *
- *                                                                       *
- ************************************************************************/
+//
+// Inline impls
+//
+
+// TODO: Now that we've extracted these into helpers, we can pre-allocate or pool these allocations
+
+template <typename T, typename... Args>
+bool CStatusEffectContainer::AddStatusEffect(Args&&... args)
+{
+    TracyZoneScoped;
+
+    return AddStatusEffect(std::make_unique<T>(std::forward<Args>(args)...), EffectNotice::ShowMessage);
+}
+
+// As above, but suppresses the gain/loss messages (the EffectNotice::Silent path).
+template <typename T, typename... Args>
+bool CStatusEffectContainer::AddStatusEffectSilent(Args&&... args)
+{
+    TracyZoneScoped;
+
+    return AddStatusEffect(std::make_unique<T>(std::forward<Args>(args)...), EffectNotice::Silent);
+}
+
+template <typename F, typename... Args>
+void CStatusEffectContainer::ForEachEffect(F func, Args&&... args)
+{
+    TracyZoneScoped;
+
+    // The container owns each effect; hand callers a reference to the underlying effect.
+    for (auto&& PEffect : m_StatusEffectSet)
+    {
+        func(*PEffect, std::forward<Args>(args)...);
+    }
+}
+
+//
+// Helpers
+//
 
 namespace effects
 {

@@ -55,7 +55,7 @@ entity.onMobSpawn = function(mob)
     mob:setMobMod(xi.mobMod.SIGHT_RANGE, 20)
     mob:setMobMod(xi.mobMod.SOUND_RANGE, 20)
     mob:setMobMod(xi.mobMod.MAGIC_COOL, 45)
-    mob:setMobMod(xi.mobMod.WEAPON_BONUS, 156)
+    mob:setMobMod(xi.mobMod.BASE_DAMAGE_MODIFIER, 156)
     mob:setMod(xi.mod.UFASTCAST, 15)
     mob:setMod(xi.mod.ATT, 376)
     mob:setMod(xi.mod.INT, 21)
@@ -220,7 +220,10 @@ entity.onMobSpellChoose = function(mob, target, spellId)
         [10] = { xi.magic.spell.PHALANX,   mob,    false, xi.action.type.ENHANCING_FORCE_SELF, xi.effect.PHALANX,   0, 100 },
     }
 
-    if target:hasStatusEffectByFlag(xi.effectFlag.DISPELABLE) then
+    if
+        target:hasStatusEffectByFlag(xi.effectFlag.DISPELABLE) and
+        mob:isEngaged()
+    then
         table.insert(spellList, #spellList + 1, { xi.magic.spell.DISPELGA, target, false, xi.action.type.NONE, nil, 0, 100 })
     end
 

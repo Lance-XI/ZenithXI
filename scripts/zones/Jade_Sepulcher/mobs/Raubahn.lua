@@ -26,7 +26,7 @@ entity.onMobInitialize = function(mob)
     mob:addListener('TAKE_DAMAGE', 'RAUBAHN_TAKE_DAMAGE', function(mobArg, damage, attacker, attackType, damageType)
         if damage >= 400 then -- This might also increase Raubahn's accuracy.
             mob:messageText(mob, ID.text.RAUBAHN_GREATER_POWER)
-            mob:setMobMod(xi.mobMod.BASE_DAMAGE_MULTIPLIER, 200)
+            mob:setMobMod(xi.mobMod.BASE_DAMAGE_MULTIPLIER, 150)
         end
     end)
 end

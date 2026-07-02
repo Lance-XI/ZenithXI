@@ -29,12 +29,12 @@
 
 #include "enmity_container.h"
 
-#include "entities/baseentity.h"
-#include "entities/battleentity.h"
-#include "entities/charentity.h"
-#include "entities/mobentity.h"
-#include "entities/npcentity.h"
-#include "entities/trustentity.h"
+#include "entities/base_entity.h"
+#include "entities/battle_entity.h"
+#include "entities/char_entity.h"
+#include "entities/mob_entity.h"
+#include "entities/npc_entity.h"
+#include "entities/trust_entity.h"
 
 #include "lua/luautils.h"
 
@@ -66,9 +66,9 @@ CBattlefield::CBattlefield(uint16 id, CZone* PZone, uint8 area, CCharEntity* PIn
 {
     m_Initiator.id     = PInitiator->id;
     m_Initiator.name   = PInitiator->name;
-    m_Record.name      = "Meme";
+    m_Record.name      = "Someone";
     m_Record.time      = 24h;
-    m_Record.partySize = 69;
+    m_Record.partySize = 6;
     m_Tick             = m_StartTime;
     m_RegisteredPlayers.emplace(PInitiator->id);
 }
@@ -284,7 +284,7 @@ void CBattlefield::ApplyLevelRestrictions(CCharEntity* PChar) const
 
         PChar->StatusEffectContainer->DelStatusEffectsByFlag(xi::StatusEffectFlag::Dispelable, EffectNotice::Silent);
         PChar->StatusEffectContainer->DelStatusEffectSilent(xi::StatusEffect::Reraise);
-        PChar->StatusEffectContainer->AddStatusEffect(new CStatusEffect(xi::StatusEffect::LevelRestriction, static_cast<uint16>(xi::StatusEffect::LevelRestriction), cap, 0s, 0s));
+        PChar->StatusEffectContainer->AddStatusEffect(xi::StatusEffect::LevelRestriction, static_cast<uint16>(xi::StatusEffect::LevelRestriction), cap, 0s, 0s);
     }
     else
     {
@@ -294,7 +294,7 @@ void CBattlefield::ApplyLevelRestrictions(CCharEntity* PChar) const
     // Check if we should remove SJ, whether or not there is a lv cap.
     if (!(m_Rules & BCRULES::RULES_ALLOW_SUBJOBS))
     {
-        PChar->StatusEffectContainer->AddStatusEffect(new CStatusEffect(xi::StatusEffect::SjRestriction, static_cast<uint16>(xi::StatusEffect::SjRestriction), 0, 0s, 0s));
+        PChar->StatusEffectContainer->AddStatusEffect(xi::StatusEffect::SjRestriction, static_cast<uint16>(xi::StatusEffect::SjRestriction), 0, 0s, 0s);
     }
 }
 
@@ -430,8 +430,8 @@ bool CBattlefield::InsertEntity(CBaseEntity* PEntity, bool enter, BATTLEFIELDMOB
         }
         else
         {
-            entity->StatusEffectContainer->AddStatusEffect(
-                new CStatusEffect(xi::StatusEffect::Battlefield, static_cast<uint16>(xi::StatusEffect::Battlefield), this->GetID(), 0s, 0s, m_Initiator.id, this->GetArea()), EffectNotice::Silent);
+            entity->StatusEffectContainer->AddStatusEffectSilent(
+                xi::StatusEffect::Battlefield, static_cast<uint16>(xi::StatusEffect::Battlefield), this->GetID(), 0s, 0s, m_Initiator.id, this->GetArea());
         }
     }
 
@@ -762,6 +762,12 @@ bool CBattlefield::Cleanup(timer::time_point time, bool force)
 
     for (const auto& mob : m_RequiredEnemyList)
     {
+        // Negate the no despawn bit to allow mobs that may use no despawn mechanics to despawn properly
+        if (mob.PMob->m_Behavior & BEHAVIOR_NO_DESPAWN)
+        {
+            mob.PMob->m_Behavior &= ~BEHAVIOR_NO_DESPAWN;
+        }
+
         if (mob.PMob->isAlive() && mob.PMob->PAI->IsSpawned())
         {
             mob.PMob->PAI->Despawn();
@@ -770,6 +776,12 @@ bool CBattlefield::Cleanup(timer::time_point time, bool force)
 
     for (const auto& mob : m_AdditionalEnemyList)
     {
+        // Negate the no despawn bit to allow mobs that may use no despawn mechanics to despawn properly
+        if (mob.PMob->m_Behavior & BEHAVIOR_NO_DESPAWN)
+        {
+            mob.PMob->m_Behavior &= ~BEHAVIOR_NO_DESPAWN;
+        }
+
         if (mob.PMob->isAlive() && mob.PMob->PAI->IsSpawned())
         {
             mob.PMob->PAI->Despawn();

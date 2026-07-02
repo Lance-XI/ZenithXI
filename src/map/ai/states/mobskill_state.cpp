@@ -25,8 +25,8 @@
 #include "ai/ai_container.h"
 #include "ai/helpers/targetfind.h"
 #include "enmity_container.h"
-#include "entities/battleentity.h"
-#include "entities/mobentity.h"
+#include "entities/battle_entity.h"
+#include "entities/mob_entity.h"
 #include "enums/action/category.h"
 #include "lua/luautils.h"
 #include "mobskill.h"
@@ -143,9 +143,15 @@ void CMobSkillState::SpendCost()
         else if (m_PEntity->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::MeikyoShisui) &&
                  m_PEntity->GetLocalVar("[MeikyoShisui]MobSkillCount") > 0)
         {
-            auto currentCount = m_PEntity->GetLocalVar("[MeikyoShisui]MobSkillCount");
-            m_PEntity->SetLocalVar("[MeikyoShisui]MobSkillCount", currentCount - 1);
-            m_spentTP = m_PEntity->addTP(-1000);
+            auto currentCount = m_PEntity->GetLocalVar("[MeikyoShisui]MobSkillCount") - 1;
+            m_PEntity->SetLocalVar("[MeikyoShisui]MobSkillCount", currentCount);
+
+            m_spentTP = 3000; // Unknown how mobs behave like this
+
+            if (currentCount == 0)
+            {
+                m_PEntity->health.tp = 0;
+            }
         }
         else
         {
@@ -183,10 +189,11 @@ bool CMobSkillState::Update(timer::time_point tick)
         // Zero message ID
         if (m_PSkill->getFlag() & SKILLFLAG_NO_FINISH_MSG)
         {
-            action.ForEachResult([&](action_result_t& result)
-                                 {
-                                     result.messageID = MsgBasic::None;
-                                 });
+            action.ForEachResult(
+                [&](action_result_t& result)
+                {
+                    result.messageID = MsgBasic::None;
+                });
         }
 
         // Only send packet if action was populated (e.g. interrupts return early)
@@ -276,7 +283,7 @@ void CMobSkillState::reduceTpOnInterrupt() const
         // charm -> build tp -> leave -> stun -> interrupt TP move with weapon bash -> charm and check TP. Note that weapon bash incurs damage and thus adds TP.
         // Note: this is very incomplete. Further testing shows that other statuses also reduce TP but in addition it seems that specific mobskills may reduce TP more or less than these numbers
         // Thus while incomplete, is better than nothing.
-        if (m_PEntity->StatusEffectContainer && m_PEntity->StatusEffectContainer->HasPreventActionEffect())
+        if (m_PEntity->StatusEffectContainer && m_PEntity->StatusEffectContainer->HasPreventActionEffect() && !m_PEntity->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::MeikyoShisui))
         {
             int16 tp = m_spentTP;
             if (tp >= 2900)

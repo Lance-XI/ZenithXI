@@ -25,7 +25,7 @@
 #include "common/vana_time.h"
 
 #include "daily_system.h"
-#include "entities/charentity.h"
+#include "entities/char_entity.h"
 #include "latent_effect_container.h"
 #include "lua/luautils.h"
 #include "map_constants.h"
@@ -152,7 +152,6 @@ auto time_server(Scheduler& scheduler, MapConfig config) -> Task<void>
                         });
                 });
 
-            guildutils::UpdateGuildsStock();
             zoneutils::SavePlayTime();
         }
 

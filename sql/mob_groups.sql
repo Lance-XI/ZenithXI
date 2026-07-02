@@ -438,7 +438,7 @@ INSERT INTO `mob_groups` VALUES (61,975,9,'Demonic_Millstone',960,0,606,0,0,0,NU
 INSERT INTO `mob_groups` VALUES (62,1432,9,'Frost_Lizard',960,0,913,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (63,1042,9,'Diremite_Dominator',900,0,659,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (64,217,9,'Archaic_Chest',0,128,153,0,0,0,NULL);
-INSERT INTO `mob_groups` VALUES (65,1750,9,'Golden-Tongued_Culberry',0,128,0,20000,30000,0,NULL);
+INSERT INTO `mob_groups` VALUES (65,1750,9,'Golden-Tongued_Culberry',0,128,0,30000,30000,0,NULL);
 
 -- ------------------------------------------------------------
 -- The_Shrouded_Maw (Zone 10)
@@ -1130,7 +1130,7 @@ INSERT INTO `mob_groups` VALUES (4,2770,28,'Mummy',960,0,1754,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (5,2407,28,'Lich',960,0,958,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (6,476,28,'Blubber_Eyes',960,0,315,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (7,4112,28,'Utukku',960,0,2528,0,0,0,NULL);
-INSERT INTO `mob_groups` VALUES (8,1196,28,'Elel',0,128,757,6000,0,0,NULL);
+INSERT INTO `mob_groups` VALUES (8,1196,28,'Elel',0,128,757,6500,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (9,1388,28,'Fomor_Ranger',960,0,874,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (10,1386,28,'Fomor_Ninja',960,0,871,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (11,1380,28,'Fomor_Bard',960,0,857,0,0,0,NULL);
@@ -1160,6 +1160,7 @@ INSERT INTO `mob_groups` VALUES (34,913,28,'Dark_Elemental',960,4,568,0,0,0,NULL
 INSERT INTO `mob_groups` VALUES (35,333,28,'Balor',0,128,218,6300,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (36,2444,28,'Luaith',0,128,218,6400,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (37,2427,28,'Lobais',0,128,218,6100,0,0,NULL);
+INSERT INTO `mob_groups` VALUES (43,1395,28,'Fomors_Elemental_Lobais',0,128,0,790,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (38,1392,28,'Fomors_Avatar',0,128,0,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (39,608,28,'Caithleann',0,128,218,6200,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (40,2074,28,'Indich',0,128,218,6500,0,0,NULL);
@@ -2951,7 +2952,7 @@ INSERT INTO `mob_groups` VALUES (44,5195,54,'Draugar_Servant_blm',960,0,702,0,0,
 INSERT INTO `mob_groups` VALUES (45,5196,54,'Draugar_Servant_drg',960,0,702,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (46,2330,54,'Lamia_Deathdancer',960,0,1485,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (47,5197,54,'Draugar_Servant_thf',960,0,702,0,0,0,NULL);
-INSERT INTO `mob_groups` VALUES (48,465,54,'Bloody_Bones',0,32,306,0,0,0,NULL);
+INSERT INTO `mob_groups` VALUES (48,465,54,'Bloody_Bones',0,32,306,13000,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (49,2629,54,'Merrow_Songstress',960,0,1657,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (50,2617,54,'Merrow_Bladedancer',960,0,1657,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (51,2043,54,'Ice_Elemental',960,4,1347,0,0,0,NULL);
@@ -2989,8 +2990,8 @@ INSERT INTO `mob_groups` VALUES (82,2354,54,'Lamia_Palace_Guard_rng',0,128,0,0,0
 INSERT INTO `mob_groups` VALUES (83,2606,54,'Medusa',259200,0,1651,55000,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (84,2331,54,'Lamia_Exon',0,128,0,0,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (85,3057,54,'Ornery_Orobon',0,128,0,0,0,0,NULL);
-INSERT INTO `mob_groups` VALUES (86,2345,54,'Lamia_No19',0,128,2996,18000,9000,0,NULL);
-INSERT INTO `mob_groups` VALUES (87,2360,54,'Lamias_Skeleton',0,128,0,5000,0,0,NULL);
+INSERT INTO `mob_groups` VALUES (86,2345,54,'Lamia_No19',0,0,2996,9500,9000,0,NULL);
+INSERT INTO `mob_groups` VALUES (87,2360,54,'Lamias_Skeleton',0,128,0,4200,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (88,2417,54,'Lil_Apkallu',0,128,1523,15000,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (89,4217,54,'Velionis',0,128,2576,15000,0,0,NULL);
 INSERT INTO `mob_groups` VALUES (90,4490,54,'Zareehkl_the_Jubilant',0,128,2794,75000,0,0,NULL);

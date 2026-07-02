@@ -23,7 +23,7 @@
 
 #include "action/action.h"
 #include "ai/ai_container.h"
-#include "entities/battleentity.h"
+#include "entities/battle_entity.h"
 #include "packets/s2c/0x028_battle2.h"
 #include "packets/s2c/0x029_battle_message.h"
 #include "roe.h"
@@ -94,11 +94,15 @@ void CWeaponSkillState::SpendCost()
     auto tp = 0;
     if (m_PEntity->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::MeikyoShisui))
     {
-        tp = m_PEntity->addTP(-1000);
+        // Meikyo Shisui uses the entitys current TP value for the weaponskill. 3K -> 2K -> 1K. So we set TP the entities current amount.
+        tp = m_PEntity->health.tp;
+        m_PEntity->addTP(-1000);
     }
     else if (m_PEntity->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Sekkanoki))
     {
-        tp = m_PEntity->addTP(-1000);
+        // Sekkanoki counts as a 1000 TP weaponskill.
+        tp = 1000;
+        m_PEntity->addTP(-1000);
         m_PEntity->StatusEffectContainer->DelStatusEffect(xi::StatusEffect::Sekkanoki);
     }
     else

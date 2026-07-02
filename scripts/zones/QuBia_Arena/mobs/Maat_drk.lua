@@ -22,7 +22,7 @@ entity.onMobInitialize = function(mob)
         end
 
         if damage >= 594 then
-            mob:setMobMod(xi.mobMod.BASE_DAMAGE_MULTIPLIER, 200)
+            mobArg:setMobMod(xi.mobMod.BASE_DAMAGE_MULTIPLIER, 150)
         end
     end)
 end
@@ -30,7 +30,7 @@ end
 entity.onMobSpawn = function(mob)
     mob:setUnkillable(true)
     mob:setBaseSpeed(60)
-    mob:setMobMod(xi.mobMod.BASE_DAMAGE_MULTIPLIER, 150)
+    mob:setMobMod(xi.mobMod.BASE_DAMAGE_MULTIPLIER, 125)
 
     -- Reset mob.
     xi.combat.behavior.enableAllActions(mob)

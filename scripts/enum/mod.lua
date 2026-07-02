@@ -481,8 +481,9 @@ xi.mod =
     SPIKES                          = 342,
     ENSPELL_DMG                     = 343,
     ENSPELL_CHANCE                  = 856,
-    ENSPELL_DMG_BONUS               = 432, -- Adds to the base damage of the enspell before bonuses and reductions
+    ENSPELL_DMG_BONUS               = 432,  -- Adds to the base damage of the enspell before bonuses and reductions
     ENSPELL_DMG_PCT                 = 1195, -- Adds to the multiplier applied to enspell damage after base damage is calculated, before day and weather bonuses and reductions
+    ENSPELL_DURATION                = 938,  -- Adds a flat bonus to duration in seconds. Examples: Buzzard tuck, Brilliance.
     SPIKES_DMG                      = 344,
     TP_BONUS                        = 345,
     SPIKES_DMG_BONUS                = 1079, -- Increases Blaze/Ice/Shock spikes damage by percentage (e.g. mod value 50 = +50% spikes damage)
@@ -585,6 +586,8 @@ xi.mod =
 
     -- Puppetmaster
     AUTOMATON_LVL_BONUS             = 1044, -- Automaton: Lv. (Increases automaton's base level above 99)
+    TACTICAL_SWITCH_TP_BONUS        = 1199, -- TP bonus granted by Tactical Switch (percent)
+    OVERDRIVE_BONUS_DURATION        = 1200, -- Extra seconds added to Overdrive
 
     -- Blue Mage
     ENHANCES_BURST_AFFINITY         = 1139, -- Increases WSC bonus on spells cast with Burst Affinity (percent)
