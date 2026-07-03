@@ -98,7 +98,7 @@ m:addOverride('xi.effects.trick_attack.onEffectLose', function(player, effect)
 
         -- Temporarily re-apply Trick Attack effect to identify the TA partner
         -- This is needed because getTrickAttackChar requires the effect to be active
-        player:addStatusEffect(xi.effect.TRICK_ATTACK, 0, 0, 10)
+        player:addStatusEffect(xi.effect.TRICK_ATTACK, { power = 0, tick = 0, duration = 10, origin = player })
         local taTarget = player:getTrickAttackChar(pTarget)
         player:delStatusEffectSilent(xi.effect.TRICK_ATTACK)
 
