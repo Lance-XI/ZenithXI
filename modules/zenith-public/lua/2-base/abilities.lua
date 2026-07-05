@@ -125,6 +125,24 @@ local effectAdjustments =
             power = -30, -- Changed from 1.5x to 1.20x
         },
     },
+    -- Blue Mage
+    azure_lore =
+    {
+        effectId = xi.effect.AZURE_LORE,
+        add =
+        {
+            duration = 15000, -- Changed from 30s to 45s
+        },
+    },
+    -- Puppetmaster
+    overdrive =
+    {
+        effectId = xi.effect.OVERDRIVE,
+        add =
+        {
+            duration = -120000, -- Reverted from 180s to original 60s
+        },
+    },
 }
 
 -- Helper function to check if an effect is being restored
