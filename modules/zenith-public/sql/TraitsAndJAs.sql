@@ -129,8 +129,8 @@ UPDATE `abilities` SET `level` = 75 WHERE `name` = 'perpetuance'; -- Abyssea
 UPDATE `abilities` SET `level` = 75 WHERE `name` = 'immanence'; -- Abyssea
 
 -- Strategems
-UPDATE `abilities_charges` SET `level` = 65 AND `chargeTime` = 70 WHERE `recastId` = 231 AND `maxCharges` = 4; -- 4 stratagem limit at level 65. Recharges every 70 seconds instead of 60 (3 charges limit is 80 seconds)
-UPDATE `abilities_charges` SET `level` = 75 AND `chargeTime` = 60 WHERE `recastId` = 231 AND `maxCharges` = 5; -- 5 stratagem limit at level 75. Recharges every 60 seconds instead of 48
+UPDATE `abilities_charges` SET `level` = 65, `chargeTime` = 70 WHERE `recastId` = 231 AND `maxCharges` = 4; -- 4 stratagem limit at level 65. Recharges every 70 seconds instead of 60 (3 charges limit is 80 seconds)
+UPDATE `abilities_charges` SET `level` = 75, `chargeTime` = 60 WHERE `recastId` = 231 AND `maxCharges` = 5; -- 5 stratagem limit at level 75. Recharges every 60 seconds instead of 48
 
 -- RUN
 UPDATE `abilities` SET `level` = 71 WHERE `name` = 'liement'; -- SOA
