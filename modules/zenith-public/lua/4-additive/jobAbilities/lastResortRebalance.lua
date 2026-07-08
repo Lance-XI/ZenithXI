@@ -11,7 +11,7 @@ local m = Module:new('a-j_last_resort_rebal')
 
 -----------------------------------
 -- Shorten duration: 180s -> 60s
--- (full replacement of the trivial base useLastResort -- smallest targeted change)
+-- (75 Era duration: 30 seconds)
 -----------------------------------
 m:addOverride('xi.job_utils.dark_knight.useLastResort', function(player, target, ability)
     player:addStatusEffect(xi.effect.LAST_RESORT, { duration = 60, origin = player })
