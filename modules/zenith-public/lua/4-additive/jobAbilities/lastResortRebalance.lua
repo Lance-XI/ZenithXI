@@ -32,7 +32,7 @@ m:addOverride('xi.effects.last_resort.onEffectGain', function(target, effect)
     effect:addMod(xi.mod.ATT, 2 * targetJobPoints)
     effect:addMod(xi.mod.RATT, 2 * targetJobPoints)
 
-    -- Reduced potency (base 15, still +1% per Last Resort Effect merit level)
+    -- Reduced potency (base 15, still +2% Atk -2% Def per Last Resort Effect merit level)
     effect:addMod(xi.mod.ATTP, 15 + targetMerit)
     effect:addMod(xi.mod.RATTP, 15 + targetMerit)
     effect:addMod(xi.mod.DEFP, -15 - targetMerit)
