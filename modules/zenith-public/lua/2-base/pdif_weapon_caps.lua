@@ -1,7 +1,7 @@
 -----------------------------------
--- Custom pDIF weapon caps
+-- Post August 2007 pDIF weapon caps
 -- Overrides xi.combat.physical.pDifWeaponCapTable (PC melee/ranged pDIF caps):
---   1H melee = 2.0, 2H melee = 2.25, ranged & automaton = 3.0
+--   1H melee = 2.0, 2H melee = 2.25, ranged 3.0. Automaton are included for completeness, not active behavior.
 -----------------------------------
 require('modules/module_utils')
 -----------------------------------
