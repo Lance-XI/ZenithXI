@@ -21,7 +21,7 @@ end)
 
 -----------------------------------
 -- Reduce potency: ATTP/RATTP 25 -> 15, DEFP -25 -> -15 (merit scaling retained).
--- Job-point flat attack and Desperate Blows haste are re-applied unchanged, since
+-- Job-point flat attack and Desperate Blows haste are re-applied unchanged. Job points aren't utilized on Zenith.
 -- a full onEffectGain replacement must re-add every mod it wants to keep.
 -----------------------------------
 m:addOverride('xi.effects.last_resort.onEffectGain', function(target, effect)
