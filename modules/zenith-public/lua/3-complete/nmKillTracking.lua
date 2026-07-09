@@ -8,8 +8,18 @@ local m = Module:new('c_nmKillTracking')
 -----------------------------------
 -- NM Tracking Table
 -- Structure: charvar name -> list of NMs (max 32 per var)
--- Each NM entry: { name = 'Mob_Name', zoneId = xi.zone.ZONE_NAME }
--- Bit position is determined by array index (index 1 = bit 0, etc.)
+-- Each NM entry: { name = 'Mob_Name', zoneId = xi.zone.ZONE_NAME, notCoded = bool }
+--
+-- zoneId is optional. Omit it for roaming ZNMs, which can be popped in any of
+-- several zones; those match on name alone. Keep it for NMs that share a name
+-- with a copy in another zone (many have a Nyzul Isle duplicate), where a
+-- name-only match would hand out credit for the wrong mob.
+--
+-- CAVEAT: a bit position is the entry's array index, and the resulting masks are
+-- persisted per character. Only ever APPEND to a group, and never delete or
+-- reorder an entry -- doing so shifts every bit after it and silently rewrites
+-- existing players' kill history. To retire an entry, leave it in place and set
+-- notCoded = true. A group holds at most 32 entries; start a new group after that.
 -----------------------------------
 local nmTracking =
 {
@@ -34,21 +44,24 @@ local nmTracking =
         { name = 'Jailer_of_Love', zoneId = xi.zone.ALTAIEU },
         { name = 'Absolute_Virtue', zoneId = xi.zone.ALTAIEU },
         { name = 'Dynamis_Lord', zoneId = xi.zone.DYNAMIS_XARCABARD },
-        { name = 'Proto-Omega', zoneId = xi.zone.APOLLYON },
-        { name = 'Proto-Ultima', zoneId = xi.zone.TEMENOS },
+        -- No mob named Proto-Omega/Proto-Ultima exists (Limbus is not implemented).
+        -- Kept in place, flagged notCoded: deleting them would shift every bit
+        -- after them and invalidate already-persisted WardrobeNM_Group1 masks.
+        { name = 'Proto-Omega', zoneId = xi.zone.APOLLYON, notCoded = true },
+        { name = 'Proto-Ultima', zoneId = xi.zone.TEMENOS, notCoded = true },
         { name = 'Ouryu', zoneId = xi.zone.RIVERNE_SITE_A01 },
         { name = 'Bahamut', zoneId = xi.zone.RIVERNE_SITE_B01 },
         { name = 'Tiamat', zoneId = xi.zone.ATTOHWA_CHASM },
         { name = 'Vrtra', zoneId = xi.zone.KING_RANPERRES_TOMB },
         { name = 'Jormungand', zoneId = xi.zone.ULEGUERAND_RANGE },
-        { name = 'Yilbegan', zoneId = xi.zone.BATALLIA_DOWNS },
+        { name = 'Yilbegan' },
         { name = 'Pandemonium_Warden', zoneId = xi.zone.AYDEEWA_SUBTERRANE },
-        { name = 'Krabkatoa', zoneId = xi.zone.EAST_RONFAURE },
-        { name = 'Blobdingnag', zoneId = xi.zone.NORTH_GUSTABERG },
-        { name = 'Orcus', zoneId = xi.zone.MERIPHATAUD_MOUNTAINS },
-        { name = 'Verthandi', zoneId = xi.zone.BATALLIA_DOWNS },
-        { name = 'Lord_Ruthven', zoneId = xi.zone.BEAUCEDINE_GLACIER },
-        { name = 'Dawon', zoneId = xi.zone.KONSCHTAT_HIGHLANDS },
+        { name = 'Krabkatoa' },
+        { name = 'Blobdingnag' },
+        { name = 'Orcus' },
+        { name = 'Verthandi' },
+        { name = 'Lord_Ruthven' },
+        { name = 'Dawon' },
         { name = 'Tinnin', zoneId = xi.zone.WAJAOM_WOODLANDS },
         { name = 'Sarameya', zoneId = xi.zone.MOUNT_ZHAYOLM },
         { name = 'Tyger', zoneId = xi.zone.CAEDARVA_MIRE },
@@ -128,6 +141,7 @@ local nmTracking =
         { name = 'Fahrafahr_the_Bloodied', zoneId = xi.zone.MOUNT_ZHAYOLM },
         { name = 'Cookieduster_Lipiroon', zoneId = xi.zone.ALZADAAL_UNDERSEA_RUINS },
         { name = 'Centipedal_Centruroides', zoneId = xi.zone.MERIPHATAUD_MOUNTAINS_S },
+        { name = 'Hellion', zoneId = xi.zone.LABYRINTH_OF_ONZOZO },
     },
 
     -- Wardrobe Unlock NM Group 4: Additional NMs
@@ -152,6 +166,8 @@ local nmTracking =
 
 -----------------------------------
 -- Helper: Find NM in tracking table
+-- Entries that omit zoneId match on name alone, so a roaming ZNM counts wherever
+-- it is popped.
 -- @param mobName string: The mob's internal name
 -- @param zoneId number: The zone ID (xi.zone.*)
 -- @return charVarName string|nil, bitPos number|nil
@@ -159,7 +175,10 @@ local nmTracking =
 local function findTrackedNM(mobName, zoneId)
     for charVarName, nmList in pairs(nmTracking) do
         for bitPos, nmData in ipairs(nmList) do
-            if nmData.name == mobName and nmData.zoneId == zoneId then
+            if
+                nmData.name == mobName and
+                (nmData.zoneId == nil or nmData.zoneId == zoneId)
+            then
                 return charVarName, bitPos - 1 -- 0-indexed bit position
             end
         end
@@ -192,35 +211,44 @@ local function trackKillForPlayer(player, charVarName, bitPos, mobName)
 end
 
 -----------------------------------
--- Hook into mob death to track NM kills
------------------------------------
-m:addOverride('xi.mob.onMobDeathEx', function(mob, player, isKiller, isWeaponSkillKill)
-    super(mob, player, isKiller, isWeaponSkillKill)
-
-    -- Only process if there's a valid player and mob is NM
-    if player == nil or not mob:isNM() then
-        return
-    end
-
-    local mobName = mob:getName()
-    local zoneId = mob:getZoneID()
-
-    -- Check if this NM is tracked
-    local charVarName, bitPos = findTrackedNM(mobName, zoneId)
-    if charVarName == nil then
-        return
-    end
-
-    -- Track the kill for this player
-    -- Note: onMobDeathEx is already called once per alliance member by the core
-    trackKillForPlayer(player, charVarName, bitPos, mobName)
-end)
-
------------------------------------
 -- Public API (optional helper functions)
 -----------------------------------
 xi = xi or {}
 xi.nmTracking = xi.nmTracking or {}
+
+-----------------------------------
+-- Record a kill of a tracked NM for a single player.
+-- Idempotent: a kill that is already recorded is a no-op. Consumers that react to
+-- the recorded flag (wardrobeUnlocks) call this before reading it, so neither
+-- module depends on which one's onMobDeathEx override wraps the other.
+-- @param player CCharEntity: The player to credit the kill to
+-- @param mob CBaseEntity: The mob that died
+-----------------------------------
+xi.nmTracking.trackKill = function(player, mob)
+    if player == nil or mob == nil or not mob:isNM() then
+        return
+    end
+
+    local mobName = mob:getName()
+
+    -- Check if this NM is tracked
+    local charVarName, bitPos = findTrackedNM(mobName, mob:getZoneID())
+    if charVarName == nil then
+        return
+    end
+
+    trackKillForPlayer(player, charVarName, bitPos, mobName)
+end
+
+-----------------------------------
+-- Hook into mob death to track NM kills
+-- Note: onMobDeathEx is already called once per alliance member by the core
+-----------------------------------
+m:addOverride('xi.mob.onMobDeathEx', function(mob, player, isKiller, isWeaponSkillKill)
+    super(mob, player, isKiller, isWeaponSkillKill)
+
+    xi.nmTracking.trackKill(player, mob)
+end)
 
 -----------------------------------
 -- Get the NM tracking table (for external use)
@@ -247,17 +275,30 @@ end
 
 -----------------------------------
 -- Check if all NMs in a group have been killed
+-- notCoded entries are skipped: their NMs do not exist, so requiring their bits
+-- would leave the group permanently incomplete.
 -- @param player CCharEntity: The player to check
 -- @param charVarName string: The char_var group name
 -- @return boolean: True if all NMs in group are killed
 -----------------------------------
 xi.nmTracking.hasKilledAll = function(player, charVarName)
-    if not nmTracking[charVarName] then
+    local nmList = nmTracking[charVarName]
+    if not nmList then
         return false
     end
 
+    -- Not utils.mask.isFull: it compares bit.band's signed -1 against the float
+    -- 2^32 - 1, so a full 32-bit mask never reports as full, and groups 1-3 are
+    -- all exactly 32 entries.
     local mask = player:getCharVar(charVarName)
-    return utils.mask.isFull(mask, #nmTracking[charVarName])
+
+    for bitPos, nmData in ipairs(nmList) do
+        if not nmData.notCoded and not utils.mask.getBit(mask, bitPos - 1) then
+            return false
+        end
+    end
+
+    return true
 end
 
 -----------------------------------

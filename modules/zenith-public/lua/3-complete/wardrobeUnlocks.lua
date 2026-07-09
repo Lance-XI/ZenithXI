@@ -179,6 +179,15 @@ end
 -- Unlock Data Tables
 -- Structure: { slots = N, checkType = 'type', params = {...}, name = 'Display Name' }
 -- Multiple char_vars used for bags with >32 unlocks
+--
+-- CAVEAT: an unlock's storage bit is derived from its position in this list (see
+-- getUnlockBitLocation), and those bits are persisted per character. Inserting,
+-- deleting, reordering, or uncommenting an entry shifts the bit of every entry
+-- after it in the same bag, silently reassigning unlocks players already earned.
+-- Append new unlocks to the end of a bag's list. Any edit that moves an existing
+-- entry requires bumping unlockStorageVersion so migrateUnlockStorage() rebuilds
+-- affected characters -- note that several entries below are commented out as
+-- "Not implemented", so re-enabling one in place counts as such an edit.
 -----------------------------------
 local unlockData =
 {
@@ -549,8 +558,8 @@ local unlockData =
             { slots = 3, checkType = checkKi, params = { xi.ki.DYNAMIS_TAVNAZIA_SLIVER }, name = 'Obtain: Dynamis - Tavnazia sliver' },
 
             -- Limbus
-            { slots = 3, checkType = checkNm, params = { 'Proto-Omega' }, name = 'Defeat: Proto-Omega' },
-            { slots = 3, checkType = checkNm, params = { 'Proto-Ultima' }, name = 'Defeat: Proto-Ultima' },
+            -- { slots = 3, checkType = checkNm, params = { 'Proto-Omega' }, name = 'Defeat: Proto-Omega' }, -- Not implemented
+            -- { slots = 3, checkType = checkNm, params = { 'Proto-Ultima' }, name = 'Defeat: Proto-Ultima' }, -- Not implemented
 
             -- Wyrm battles
             { slots = 1, checkType = checkNm, params = { 'Ouryu' }, name = 'Ouryu Cometh' },
@@ -635,7 +644,7 @@ local unlockData =
             { slots = 1, checkType = checkNm, params = { 'Keeper_of_Halidom' }, name = 'Defeat: Keeper of Halidom' },
             { slots = 1, checkType = checkNm, params = { 'Rogue_Receptacle' }, name = 'Defeat: Rogue Receptacle' },
             { slots = 1, checkType = checkNm, params = { 'Shii' }, name = 'Defeat: Shii' },
-            { slots = 1, checkType = checkNm, params = { 'Helion' }, name = 'Defeat: Helion' },
+            { slots = 1, checkType = checkNm, params = { 'Hellion' }, name = 'Defeat: Hellion' },
             { slots = 1, checkType = checkNm, params = { 'Unut' }, name = 'Defeat: Unut' },
             { slots = 1, checkType = checkNm, params = { 'Nis_Puk' }, name = 'Defeat: Nis Puk' },
             { slots = 1, checkType = checkNm, params = { 'Mahishasura' }, name = 'Defeat: Mahishasura' },
@@ -911,15 +920,43 @@ local unlockData =
 }
 
 -----------------------------------
+-- Storage layout version. Bump this whenever a change invalidates the persisted
+-- bit positions; migrateUnlockStorage() then rebuilds affected characters.
+-----------------------------------
+local unlockStorageVersion = 2
+local unlockVersionVar     = 'WardrobeUnlockVer'
+local maxContainerSize     = 80 -- CItemContainer::AddBuff clamps to this
+
+-----------------------------------
 -- Get char_var name for tracking unlocks
 -- Uses bag enum value as suffix for simplicity
 -----------------------------------
 local function getUnlockVarName(bag, groupIndex)
     if groupIndex > 1 then
-        return string.format('WardrobeUnlock_%d_%d', bag, groupIndex)
+        return string.format('WardrobeUnlockV2_%d_%d', bag, groupIndex)
     end
 
-    return string.format('WardrobeUnlock_%d', bag)
+    return string.format('WardrobeUnlockV2_%d', bag)
+end
+
+-----------------------------------
+-- Resolve the storage group and bit position for an unlock entry.
+-- char_vars store a 32-bit signed int (sql/char_vars.sql: `value int(11)`),
+-- and utils.mask uses bit.lshift, whose shift count wraps mod 32. A list with
+-- more than 32 entries would therefore alias entry #33 onto bit 0 (entry #1),
+-- entry #34 onto bit 1, and so on, silently colliding unlocks. Roll over into
+-- the next storage char_var (WardrobeUnlockV2_<bag>_<n>) every 32 entries so the
+-- bit position always stays within 0-31.
+-- @param groupIndex number: base storage group for the unlock list
+-- @param unlockIndex number: 1-based position of the unlock within its list
+-- @return number, number: storage group index, 0-based bit position
+-----------------------------------
+local bitsPerUnlockVar = 32
+
+local function getUnlockBitLocation(groupIndex, unlockIndex)
+    local flatIndex = unlockIndex - 1
+
+    return groupIndex + math.floor(flatIndex / bitsPerUnlockVar), flatIndex % bitsPerUnlockVar
 end
 
 -----------------------------------
@@ -940,6 +977,61 @@ local function markUnlockReceived(player, bag, groupIndex, unlockIndex)
 end
 
 -----------------------------------
+-- Version 1 storage char_var. Its contents are unrecoverable: v1 shifted by the
+-- unlock's list index directly, and bit.lshift takes its shift count modulo 32,
+-- so in every bag (all hold more than 32 entries) unlock #33 aliased onto #1's
+-- bit, #34 onto #2's, and so on. v1 only ever wrote this one var per bag.
+-----------------------------------
+local function getLegacyUnlockVarName(bag)
+    return string.format('WardrobeUnlock_%d', bag)
+end
+
+-----------------------------------
+-- Rebuild a character's unlock flags under the current storage version: mark
+-- every unlock they qualify for and top each bag up to that entitlement.
+-- Bags are only ever grown. Characters predating this module still carry
+-- full-size bags, and shrinking one would strand items past the new cap.
+-- @param player CCharEntity: The player to migrate
+-----------------------------------
+local function migrateUnlockStorage(player)
+    if player:getCharVar(unlockVersionVar) >= unlockStorageVersion then
+        return
+    end
+
+    for bag, groups in pairs(unlockData) do
+        local entitlement = 0
+        local masks       = {}
+
+        for groupIndex, unlocks in ipairs(groups) do
+            for unlockIndex, unlock in ipairs(unlocks) do
+                if evaluateCheck(player, unlock.checkType, unlock.params) then
+                    local storageGroup, bitPos = getUnlockBitLocation(groupIndex, unlockIndex)
+
+                    masks[storageGroup] = utils.mask.setBit(masks[storageGroup] or 0, bitPos, true)
+                    entitlement = entitlement + unlock.slots
+                end
+            end
+        end
+
+        -- Write one char_var per storage group instead of one per unlock: every
+        -- setCharVar issues its own prepared statement. Overwriting wholesale is
+        -- safe because this only runs while the current-version vars are empty.
+        for storageGroup, mask in pairs(masks) do
+            player:setCharVar(getUnlockVarName(bag, storageGroup), mask)
+        end
+
+        local deficit = math.min(entitlement, maxContainerSize) - player:getContainerSize(bag)
+        if deficit > 0 then
+            player:changeContainerSize(bag, deficit)
+        end
+
+        player:setCharVar(getLegacyUnlockVarName(bag), 0) -- a value of 0 deletes the row
+    end
+
+    player:setCharVar(unlockVersionVar, unlockStorageVersion)
+end
+
+-----------------------------------
 -- Check and award unlocks for a specific bag
 -----------------------------------
 local function checkAndAwardBagUnlocks(player, bag, silent)
@@ -949,16 +1041,16 @@ local function checkAndAwardBagUnlocks(player, bag, silent)
 
     for groupIndex, unlocks in ipairs(bagUnlockGroups) do
         for unlockIndex, unlock in ipairs(unlocks) do
-            local bitPos = unlockIndex - 1
+            local storageGroup, bitPos = getUnlockBitLocation(groupIndex, unlockIndex)
 
             if
-                not hasReceivedUnlock(player, bag, groupIndex, bitPos) and
+                not hasReceivedUnlock(player, bag, storageGroup, bitPos) and
                 evaluateCheck(player, unlock.checkType, unlock.params)
             then
                 local oldSize = player:getContainerSize(bag)
                 player:changeContainerSize(bag, unlock.slots)
                 local newSize = player:getContainerSize(bag)
-                markUnlockReceived(player, bag, groupIndex, bitPos)
+                markUnlockReceived(player, bag, storageGroup, bitPos)
                 totalAwarded = totalAwarded + unlock.slots
 
                 if not silent then
@@ -989,6 +1081,13 @@ xi.wardrobeUnlocks = xi.wardrobeUnlocks or {}
 -- @return number: Total unlocks awarded
 -----------------------------------
 xi.wardrobeUnlocks.checkAllUnlocks = function(player, silent)
+    -- Migrate here rather than only on login: every entry point into the unlock
+    -- system runs through this function, so a character whose storage predates the
+    -- current version can never be evaluated against empty v2 flags -- not on a
+    -- quest turn-in, an NM kill, or a live module reload. Costs one getCharVar
+    -- once the character is up to date.
+    migrateUnlockStorage(player)
+
     local totalAwarded = 0
     for bag, _ in pairs(unlockData) do
         totalAwarded = totalAwarded + checkAndAwardBagUnlocks(player, bag, silent)
@@ -1003,16 +1102,12 @@ end
 m:addOverride('xi.player.charCreate', function(player)
     super(player)
 
-    -- Set all wardrobes to 0 slots
-    player:changeContainerSize(xi.inv.MOGCASE, -80)
-    player:changeContainerSize(xi.inv.WARDROBE, -80)
-    player:changeContainerSize(xi.inv.WARDROBE2, -80)
-    player:changeContainerSize(xi.inv.WARDROBE3, -80)
-    player:changeContainerSize(xi.inv.WARDROBE4, -80)
-    player:changeContainerSize(xi.inv.WARDROBE5, -80)
-    player:changeContainerSize(xi.inv.WARDROBE6, -80)
-    player:changeContainerSize(xi.inv.WARDROBE7, -80)
-    player:changeContainerSize(xi.inv.WARDROBE8, -80)
+    -- Set all managed bags to 0 slots. Subtract the live size rather than a flat
+    -- -80: CItemContainer::AddBuff accumulates into a uint16, so overshooting the
+    -- current size wraps it and clamps the bag straight back up to 80.
+    for bag, _ in pairs(unlockData) do
+        player:changeContainerSize(bag, -player:getContainerSize(bag))
+    end
 end)
 
 -----------------------------------
@@ -1061,6 +1156,14 @@ m:addOverride('xi.mob.onMobDeathEx', function(mob, player, isKiller, isWeaponSki
     super(mob, player, isKiller, isWeaponSkillKill)
 
     if player and mob:isNM() then
+        -- Record the kill before evaluating unlocks. nmKillTracking overrides the
+        -- same hook, and which override wraps the other is decided by module load
+        -- order, so its handler may not have run yet. trackKill is idempotent, so
+        -- calling it here is a no-op when it has.
+        if xi.nmTracking and xi.nmTracking.trackKill then
+            xi.nmTracking.trackKill(player, mob)
+        end
+
         xi.wardrobeUnlocks.checkAllUnlocks(player)
     end
 end)
@@ -1108,8 +1211,8 @@ xi.wardrobeUnlocks.getUnlockStatuses = function(player)
 
         for groupIndex, unlocks in ipairs(groups) do
             for unlockIndex, unlock in ipairs(unlocks) do
-                local bitPos = unlockIndex - 1
-                local received = hasReceivedUnlock(player, bag, groupIndex, bitPos)
+                local storageGroup, bitPos = getUnlockBitLocation(groupIndex, unlockIndex)
+                local received = hasReceivedUnlock(player, bag, storageGroup, bitPos)
 
                 if received then
                     table.insert(completed, { name = unlock.name, slots = unlock.slots })
