@@ -340,7 +340,7 @@ local lootOverrides =
     {
         [treasureType.COFFER] =
         {
-            { xi.item.NONE,        960 }, -- Gil
+            { xi.item.NONE,        920 }, -- Gil
             { xi.item.AQUAMARINE,   10 },
             { xi.item.CHRYSOBERYL,  10 },
             { xi.item.FLUORITE,     10 },
@@ -672,7 +672,7 @@ local lootOverrides =
         [treasureType.COFFER] =
         {
             { xi.item.NONE,            720 }, -- Gil
-            { xi.item.LIGHT_GAUNTLETS, 220 }, -- Item
+            { xi.item.LIGHT_GAUNTLETS, 200 }, -- Item
             { xi.item.AQUAMARINE,       10 },
             { xi.item.CHRYSOBERYL,      10 },
             { xi.item.FLUORITE,         10 },

@@ -16,7 +16,7 @@ m:addOverride('xi.regime.checkRegime', function(player, mob, regimeId, index, re
             player:getLocalVar(localVarName) == 0 and
             player:getCharVar('[regime]id') == regimeId
         then
-            player:sys('You must wait until the next game day to complete another Page of Valor')
+            player:printToPlayer('You must wait until the next game day to complete another Page of Valor', xi.msg.channel.SYSTEM_3)
             player:setLocalVar(localVarName, 1)
         end
     end
