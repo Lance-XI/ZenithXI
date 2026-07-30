@@ -36,6 +36,10 @@ global_objects=(
     _
     _G
 
+    math.randomFloat
+    math.randomInt
+    math.randomNormal
+
     Module
     Override
     super

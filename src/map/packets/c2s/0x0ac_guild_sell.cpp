@@ -21,14 +21,10 @@
 
 #include "0x0ac_guild_sell.h"
 
-#include "common/database.h"
 #include "common/settings.h"
 #include "entities/char_entity.h"
-#include "items/item_shop.h"
 #include "lua/luautils.h"
-#include "packets/s2c/0x01d_item_same.h"
 #include "packets/s2c/0x084_guild_sell.h"
-#include "utils/charutils.h"
 #include "utils/itemutils.h"
 #include "utils/zoneutils.h"
 
@@ -64,7 +60,7 @@ auto GP_CLI_COMMAND_GUILD_SELL::validate(MapSession* PSession, const CCharEntity
 {
     return PacketValidator(PChar)
         .blockedBy({ BlockedState::InEvent, BlockedState::Crafting })
-        .mustNotEqual(PChar->guildShopNpc_.id, 0, "Character does not have a guild shop")
+        .mustNotEqual(PChar->guildShopNpc_.UniqueNo, 0, "Character does not have a guild shop")
         .range("ItemNum", this->ItemNum, 1, 99);
 }
 
@@ -84,7 +80,7 @@ void GP_CLI_COMMAND_GUILD_SELL::process(MapSession* PSession, CCharEntity* PChar
         return;
     }
 
-    if (auto* PNpc = zoneutils::GetEntity(PChar->guildShopNpc_.id, TYPE_NPC))
+    if (auto* PNpc = zoneutils::GetEntity(PChar->guildShopNpc_.UniqueNo, TYPE_NPC))
     {
         const auto result = luautils::callGlobal<sol::table>("xi.guildShops.onPlayerSell", PChar, PNpc, this->ItemNo, this->ItemNum);
         if (result.valid())
