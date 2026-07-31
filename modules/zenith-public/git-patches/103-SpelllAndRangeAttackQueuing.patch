@@ -1,67 +1,64 @@
 diff --git a/src/map/ai/ai_container.cpp b/src/map/ai/ai_container.cpp
-index 555f6c0bc0..f98dbaf4f3 100644
+index 447c3983ba..7138187eb6 100644
 --- a/src/map/ai/ai_container.cpp
 +++ b/src/map/ai/ai_container.cpp
-@@ -501,6 +501,29 @@ auto CAIContainer::Tick(timer::time_point tick) -> Task<void>
-     {
+@@ -524,6 +524,24 @@ auto CAIContainer::Tick(const timer::time_point tick) -> Task<void>
          Inactive(0ms, false);
      }
-+    auto* PChar = dynamic_cast<CCharEntity*>(PEntity);
-+    if (
-+        (m_queuedRangedAttack || m_queuedSpellTargId) &&
-+        PChar &&
-+        PChar->PAI &&
-+        PChar->PAI->CanChangeState()
-+    )
+ 
++    // Replay an action that was queued during the animation phase of a ranged attack or spell.
++    if (auto* PChar = dynamic_cast<CCharEntity*>(PEntity);
++        PChar && (m_queuedRangedAttack.isSet() || m_queuedSpellTarget.isSet()) && CanChangeState())
 +    {
-+        if (
-+            m_queuedRangedAttack &&
-+            tick - PChar->m_LastRangedAttackTime > std::chrono::milliseconds(1100)
-+        )
++        if (m_queuedRangedAttack.isSet() &&
++            tick - PChar->m_LastRangedAttackTime > std::chrono::milliseconds(1100))
 +        {
 +            RangedAttack(m_queuedRangedAttack);
-+            m_queuedRangedAttack = 0;
++            m_queuedRangedAttack = EntityId{};
 +        }
-+        else if (m_queuedSpellTargId)
++        else if (m_queuedSpellTarget.isSet())
 +        {
-+            Cast(m_queuedSpellTargId, m_queuedSpell);
-+            m_queuedSpell = (SpellID)0;
-+            m_queuedSpellTargId = 0;
++            Cast(m_queuedSpellTarget, m_queuedSpell);
++            m_queuedSpell       = SpellID{};
++            m_queuedSpellTarget = EntityId{};
 +        }
 +    }
- 
++
      PEntity->PostTick();
  
+     co_return;
 diff --git a/src/map/ai/ai_container.h b/src/map/ai/ai_container.h
-index ba04b962c5..bf96d142e9 100644
+index a1aa6a9341..3f7d07d2c6 100644
 --- a/src/map/ai/ai_container.h
 +++ b/src/map/ai/ai_container.h
-@@ -132,6 +132,10 @@ public:
+@@ -126,6 +126,12 @@ public:
      // pathfinder, not guaranteed to be implemented
      std::unique_ptr<CPathFind> PathFind;
  
-+    uint16 m_queuedRangedAttack = 0;
-+    uint16 m_queuedSpellTargId = 0;
-+    SpellID m_queuedSpell = (SpellID)0;
++    // Action queued during the animation phase of a ranged attack or spell, replayed once the
++    // entity can change state again. Only one of the two is ever set.
++    EntityId m_queuedRangedAttack{};
++    EntityId m_queuedSpellTarget{};
++    SpellID  m_queuedSpell{};
 +
  protected:
      // input controller
      std::unique_ptr<CController> Controller;
 diff --git a/src/map/ai/controllers/player_controller.cpp b/src/map/ai/controllers/player_controller.cpp
-index 3ddd7b433d..6d45afd7e6 100644
+index 27a69ba159..911f70c73d 100644
 --- a/src/map/ai/controllers/player_controller.cpp
 +++ b/src/map/ai/controllers/player_controller.cpp
-@@ -25,6 +25,8 @@
+@@ -23,6 +23,8 @@
+ 
+ #include "ability.h"
  #include "ai/ai_container.h"
- #include "ai/states/death_state.h"
- #include "ai/states/inactive_state.h"
 +#include "ai/states/magic_state.h"
 +#include "ai/states/range_state.h"
  #include "entities/char_entity.h"
  #include "items/item_weapon.h"
  #include "latent_effect_container.h"
-@@ -50,6 +52,26 @@ auto CPlayerController::Tick(timer::time_point /*tick*/) -> Task<void>
- bool CPlayerController::Cast(uint16 targid, SpellID spellid)
+@@ -51,6 +53,24 @@ auto CPlayerController::Tick(timer::time_point /*tick*/) -> Task<void>
+ auto CPlayerController::Cast(const EntityId target, SpellID spellid) -> bool
  {
      auto* PChar = static_cast<CCharEntity*>(POwner);
 +
@@ -71,27 +68,24 @@ index 3ddd7b433d..6d45afd7e6 100644
 +        if (PChar->PAI->GetCurrentState()->IsCompleted())
 +        {
 +            // Queue the spell during animation phase
-+            PChar->PAI->m_queuedSpellTargId = targid;
-+            PChar->PAI->m_queuedSpell = spellid;
-+            PChar->PAI->m_queuedRangedAttack = 0;
++            PChar->PAI->m_queuedSpellTarget  = target;
++            PChar->PAI->m_queuedSpell        = spellid;
++            PChar->PAI->m_queuedRangedAttack = EntityId{};
 +            return true;
 +        }
-+        else
-+        {
-+            // Still casting, send wait message
-+            PChar->pushPacket<GP_SERV_COMMAND_BATTLE_MESSAGE>(PChar, PChar, 0, 0, MsgBasic::WaitLonger);
-+            return false;
-+        }
++
++        // Still casting, send wait message
++        PChar->pushPacket<GP_SERV_COMMAND_BATTLE_MESSAGE>(PChar, PChar, 0, 0, MsgBasic::WaitLonger);
++        return false;
 +    }
 +
      if (canAct() && !PChar->PRecastContainer->HasRecast(RECAST_MAGIC, static_cast<Recast>(spellid), 0s))
      {
-         if (auto target = PChar->GetEntity(targid); target && target->PAI->IsUntargetable())
-@@ -156,7 +178,26 @@ bool CPlayerController::Ability(uint16 targid, uint16 abilityid)
- bool CPlayerController::RangedAttack(uint16 targid)
+         if (const auto PTarget = target.resolve<CBattleEntity>(); PTarget && PTarget->PAI->IsUntargetable())
+@@ -234,6 +254,24 @@ auto CPlayerController::Ability(EntityId target, const uint16 abilityid) -> bool
+ auto CPlayerController::RangedAttack(const EntityId target) -> bool
  {
      auto* PChar = static_cast<CCharEntity*>(POwner);
--    if (canAct() && PChar->PAI->CanChangeState())
 +
 +    // Check for ranged attack queuing during animation phase
 +    if (PChar->PAI->IsCurrentState<CRangeState>())
@@ -99,19 +93,17 @@ index 3ddd7b433d..6d45afd7e6 100644
 +        if (PChar->PAI->GetCurrentState()->IsCompleted())
 +        {
 +            // Queue the ranged attack during animation phase
-+            PChar->PAI->m_queuedRangedAttack = targid;
-+            PChar->PAI->m_queuedSpell = (SpellID)0;
-+            PChar->PAI->m_queuedSpellTargId = 0;
++            PChar->PAI->m_queuedRangedAttack = target;
++            PChar->PAI->m_queuedSpell        = SpellID{};
++            PChar->PAI->m_queuedSpellTarget  = EntityId{};
 +            return true;
 +        }
-+        else
-+        {
-+            // Still shooting, send wait message
-+            PChar->pushPacket<GP_SERV_COMMAND_BATTLE_MESSAGE>(PChar, PChar, 0, 0, MsgBasic::WaitLonger);
-+            return false;
-+        }
++
++        // Still shooting, send wait message
++        PChar->pushPacket<GP_SERV_COMMAND_BATTLE_MESSAGE>(PChar, PChar, 0, 0, MsgBasic::WaitLonger);
++        return false;
 +    }
-+    else if (canAct() && PChar->PAI->CanChangeState())
++
+     if (canAct() && PChar->PAI->CanChangeState())
      {
-         if (auto target = PChar->GetEntity(targid); target && target->PAI->IsUntargetable())
-         {
+         if (const auto PTarget = target.resolve<CBattleEntity>(); PTarget && PTarget->PAI->IsUntargetable())

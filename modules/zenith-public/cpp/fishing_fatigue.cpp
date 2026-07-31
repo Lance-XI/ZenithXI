@@ -1,6 +1,21 @@
 ﻿/************************************************************************
  * Fishing Fatigue
+ *************************************************************************
+ * Copyright (c) 2026 ZenithXI Dev Teams
+ *************************************************************************
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+ *************************************************************************
  * This module implements fishing fatigue, which limits the number of fish
  * a player can catch in a day. The regular limit is 200 fish/items as
  * per retail, but is limited to 20 fish/items for new accounts until
@@ -95,12 +110,13 @@ class FishingFatigueModule : public CPPModule
             }
 
             TracyZoneScoped;
+
             // process the main packet first
             typedPacket->process(session, PChar);
 
             // Increment caught fish if something was hooked
-            uint8 animationID = PChar->animation;
-            if (animationID == ANIMATION_FISHING_CAUGHT)
+            const auto animationID = PChar->animation;
+            if (animationID == xi::Animation::FishingCaught)
             {
                 uint8 catchType = PChar->hookedFish->catchtype;
                 if (catchType >= FISHINGCATCHTYPE_SMALLFISH && catchType <= FISHINGCATCHTYPE_ITEM)
