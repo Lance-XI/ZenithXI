@@ -7,10 +7,10 @@ Applies era stat bonus scaling up to level 37 and custom formula from 37 and abo
 This patch implements era-accurate stat-to-combat scaling for players based on level progression.
 ---
 diff --git a/src/map/entities/battle_entity.cpp b/src/map/entities/battle_entity.cpp
-index 8dc0223259..44e4e8c24a 100644
+index 0b5d6bb281..71c26dabf9 100644
 --- a/src/map/entities/battle_entity.cpp
 +++ b/src/map/entities/battle_entity.cpp
-@@ -55,6 +55,20 @@
+@@ -63,6 +63,20 @@
  #include "utils/zoneutils.h"
  #include "weapon_skill.h"
  
@@ -31,7 +31,7 @@ index 8dc0223259..44e4e8c24a 100644
  CBattleEntity::CBattleEntity()
  {
      TracyZoneScoped;
-@@ -992,29 +1006,34 @@ uint16 CBattleEntity::ATT(SLOTTYPE slot)
+@@ -1135,29 +1149,34 @@ uint16 CBattleEntity::ATT(SLOTTYPE slot)
      float strMultiplier = 0.5;
  
      // https://www.bg-wiki.com/ffxi/Strength
@@ -84,7 +84,7 @@ index 8dc0223259..44e4e8c24a 100644
      }
  
      ATT += STR() * strMultiplier;
-@@ -1076,7 +1095,8 @@ uint16 CBattleEntity::RATT(uint16 bonusAtt)
+@@ -1219,7 +1238,8 @@ auto CBattleEntity::RATT(uint16 bonusAtt) -> uint16
  
      if (objtype == TYPE_PC)
      {
@@ -94,8 +94,8 @@ index 8dc0223259..44e4e8c24a 100644
          auto* weapon  = dynamic_cast<CItemWeapon*>(m_Weapons[SLOT_RANGED]);
  
          // Return 0 if ranged weapon but no ammo
-@@ -1206,7 +1226,8 @@ uint16 CBattleEntity::RACC(uint16 bonusAcc)
-         RACC += getMod(Mod::RACC);
+@@ -1350,7 +1370,8 @@ auto CBattleEntity::RACC(uint16 bonusAcc) -> uint16
+         RACC += getMod(xi::Mod::RACC);
          RACC += bonusAcc;
          RACC += battleutils::GetRangedAccuracyBonuses(this);
 -        RACC += std::floor(AGI() * settings::get<float>("main.RANGED_AGI_ACCURACY_MULTIPLIER"));
@@ -104,11 +104,11 @@ index 8dc0223259..44e4e8c24a 100644
      }
      else if (objtype & TYPE_PET && static_cast<CPetEntity*>(this)->getPetType() == PET_TYPE::AUTOMATON)
      {
-@@ -1279,10 +1300,12 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
-         uint8  skill         = 0;
-         uint16 iLvlSkill     = 0;
-         auto*  PMainWeapon   = dynamic_cast<CItemWeapon*>(m_Weapons[SLOT_MAIN]);
-+        uint8  level         = GetMLevel(); // Era-accurate level-based scaling
+@@ -1423,10 +1444,12 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+         xi::SkillType skill         = xi::SkillType::None;
+         uint16        iLvlSkill     = 0;
+         auto*         PMainWeapon   = dynamic_cast<CItemWeapon*>(m_Weapons[SLOT_MAIN]);
++        uint8         level         = GetMLevel(); // Era-accurate level-based scaling
  
          if (attackNumber == 0)
          {
@@ -118,17 +118,19 @@ index 8dc0223259..44e4e8c24a 100644
  
              if (PMainWeapon)
              {
-@@ -1291,7 +1314,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
-                 if ((skill == SKILL_NONE && GetSkill(SKILL_HAND_TO_HAND) > 0) || PMainWeapon->isHandToHand())
+@@ -1434,8 +1457,9 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+                 iLvlSkill = PMainWeapon->getILvlSkill();
+                 if ((skill == xi::SkillType::None && GetSkill(xi::SkillType::HandToHand) > 0) || PMainWeapon->isHandToHand())
                  {
-                     skill         = SKILL_HAND_TO_HAND;
+-                    skill         = xi::SkillType::HandToHand;
 -                    dexMultiplier = settings::get<float>("main.HAND_TO_HAND_DEX_ACCURACY_MULTIPLIER");
++                    skill = xi::SkillType::HandToHand;
 +                    // Era: H2H DEX->ACC: 0.5 -> 0.75
 +                    dexMultiplier = GetEraScaledMultiplier(level, 0.50f, 0.75f);
                  }
              }
          }
-@@ -1299,7 +1323,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+@@ -1443,7 +1467,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
          {
              if (auto* weapon = dynamic_cast<CItemWeapon*>(m_Weapons[SLOT_SUB]))
              {
@@ -138,37 +140,43 @@ index 8dc0223259..44e4e8c24a 100644
                  skill         = weapon->getSkillType();
                  iLvlSkill     = weapon->getILvlSkill();
  
-@@ -1309,7 +1334,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
-                     if (main_weapon && (main_weapon->getSkillType() == SKILL_NONE || main_weapon->getSkillType() == SKILL_HAND_TO_HAND))
+@@ -1452,16 +1477,18 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+                     auto* main_weapon = dynamic_cast<CItemWeapon*>(m_Weapons[SLOT_MAIN]);
+                     if (main_weapon && (main_weapon->getSkillType() == xi::SkillType::None || main_weapon->getSkillType() == xi::SkillType::HandToHand))
                      {
-                         skill         = SKILL_HAND_TO_HAND;
+-                        skill         = xi::SkillType::HandToHand;
 -                        dexMultiplier = settings::get<float>("main.HAND_TO_HAND_DEX_ACCURACY_MULTIPLIER");
++                        skill = xi::SkillType::HandToHand;
 +                        // Era: H2H DEX->ACC: 0.5 -> 0.75
 +                        dexMultiplier = GetEraScaledMultiplier(level, 0.50f, 0.75f);
                      }
                  }
              }
-@@ -1317,7 +1343,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+             else if (PMainWeapon && PMainWeapon->isHandToHand())
              {
-                 iLvlSkill     = PMainWeapon->getILvlSkill();
-                 skill         = SKILL_HAND_TO_HAND;
+-                iLvlSkill     = PMainWeapon->getILvlSkill();
+-                skill         = xi::SkillType::HandToHand;
 -                dexMultiplier = settings::get<float>("main.HAND_TO_HAND_DEX_ACCURACY_MULTIPLIER");
++                iLvlSkill = PMainWeapon->getILvlSkill();
++                skill     = xi::SkillType::HandToHand;
 +                // Era: H2H DEX->ACC: 0.5 -> 0.75
 +                dexMultiplier = GetEraScaledMultiplier(level, 0.50f, 0.75f);
              }
          }
          else if (attackNumber == 2)
-@@ -1327,7 +1354,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+@@ -1470,8 +1497,9 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+             {
                  iLvlSkill = weapon->getILvlSkill();
              }
-             skill         = SKILL_HAND_TO_HAND;
+-            skill         = xi::SkillType::HandToHand;
 -            dexMultiplier = settings::get<float>("main.HAND_TO_HAND_DEX_ACCURACY_MULTIPLIER");
++            skill = xi::SkillType::HandToHand;
 +            // Era: H2H DEX->ACC: 0.5 -> 0.75
 +            dexMultiplier = GetEraScaledMultiplier(level, 0.50f, 0.75f);
          }
  
          uint32_t skillLevel = GetSkill(skill) + iLvlSkill;
-@@ -1335,7 +1363,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
+@@ -1479,7 +1507,8 @@ uint16 CBattleEntity::ACC(uint8 attackNumber, uint16 offsetAccuracy)
  
          if (auto* weapon = dynamic_cast<CItemWeapon*>(m_Weapons[SLOT_MAIN]); weapon && weapon->isTwoHanded())
          {
@@ -177,8 +185,8 @@ index 8dc0223259..44e4e8c24a 100644
 +            dexMultiplier = GetEraScaledMultiplier(level, 0.75f, 0.75f);
  
              ACC += std::floor(DEX() * dexMultiplier);
-             ACC += m_modStat[Mod::TWOHAND_ACC];
-@@ -1434,12 +1463,19 @@ uint16 CBattleEntity::DEF()
+             ACC += getMod(xi::Mod::TWOHAND_ACC);
+@@ -1578,12 +1607,19 @@ uint16 CBattleEntity::DEF()
      // https://wiki.ffo.jp/html/35712.html
      // https://forum.square-enix.com/ffxi/threads/51154-Aug.-3-2016-%28JST%29-Version-Update?p=583669&viewfull=1#post583669
      int32 DEF       = 8;

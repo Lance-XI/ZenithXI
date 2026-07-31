@@ -1,15 +1,15 @@
 diff --git a/src/map/ai/states/attack_state.cpp b/src/map/ai/states/attack_state.cpp
-index 717264fc68..554b6da1af 100644
+index fd7d52f97e..2f4938d55f 100644
 --- a/src/map/ai/states/attack_state.cpp
 +++ b/src/map/ai/states/attack_state.cpp
-@@ -125,8 +125,8 @@ void CAttackState::UpdateTarget(uint16 targid)
+@@ -134,8 +134,8 @@ void CAttackState::UpdateTarget(const EntityId& target)
              {
                  for (auto&& PPotentialTarget : PChar->SpawnMOBList)
                  {
--                    if (PPotentialTarget.second->animation == ANIMATION_ATTACK && facing(PChar->loc.p, PPotentialTarget.second->loc.p, 64) &&
+-                    if (PPotentialTarget.second->animation == xi::Animation::Attack && facing(PChar->loc.p, PPotentialTarget.second->loc.p, 64) &&
 -                        distance(PChar->loc.p, PPotentialTarget.second->loc.p) <= 10)
-+                    if (PPotentialTarget.second->animation == ANIMATION_ATTACK &&
++                    if (PPotentialTarget.second->animation == xi::Animation::Attack &&
 +                        distance(PChar->loc.p, PPotentialTarget.second->loc.p) <= 20.0f)
                      {
                          std::unique_ptr<CBasicPacket> errMsg;
-                         if (PChar->IsValidTarget(PPotentialTarget.second->targid, TARGET_ENEMY, errMsg))
+                         if (PChar->IsValidTarget(EntityId(PPotentialTarget.second), TARGET_ENEMY, errMsg))

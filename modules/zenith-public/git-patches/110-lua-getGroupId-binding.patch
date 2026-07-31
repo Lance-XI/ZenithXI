@@ -1,8 +1,8 @@
 diff --git a/src/map/entities/mob_entity.cpp b/src/map/entities/mob_entity.cpp
-index 26c219fcb4..fcb17ce165 100644
+index b30164292a..7cd421b360 100644
 --- a/src/map/entities/mob_entity.cpp
 +++ b/src/map/entities/mob_entity.cpp
-@@ -204,6 +204,11 @@ uint32 CMobEntity::getEntityFlags() const
+@@ -192,6 +192,11 @@ auto CMobEntity::getEntityFlags() const -> xi::EntityFlags
      return m_flags;
  }
  
@@ -11,34 +11,38 @@ index 26c219fcb4..fcb17ce165 100644
 +    return m_GroupID;
 +}
 +
- void CMobEntity::setEntityFlags(uint32 EntityFlags)
+ void CMobEntity::setEntityFlags(xi::EntityFlags EntityFlags)
  {
      m_flags = EntityFlags;
 diff --git a/src/map/entities/mob_entity.h b/src/map/entities/mob_entity.h
-index 3d48aafe78..d5109656b7 100644
+index a84ce16540..8bd150e179 100644
 --- a/src/map/entities/mob_entity.h
 +++ b/src/map/entities/mob_entity.h
-@@ -121,6 +121,7 @@ public:
+@@ -66,8 +66,9 @@ public:
+     CMobEntity();
+     ~CMobEntity() override;
  
-     uint32 getEntityFlags() const;             // Returns the current value in m_flags
-     void   setEntityFlags(uint32 EntityFlags); // Change the current value in m_flags
-+    uint32 getGroupID() const;                 // Returns the mob's group ID from mob_groups
+-    auto getEntityFlags() const -> xi::EntityFlags;   // Returns the current value in m_flags
+-    void setEntityFlags(xi::EntityFlags EntityFlags); // Change the current value in m_flags
++    auto   getEntityFlags() const -> xi::EntityFlags;   // Returns the current value in m_flags
++    void   setEntityFlags(xi::EntityFlags EntityFlags); // Change the current value in m_flags
++    uint32 getGroupID() const;                          // Returns the mob's group ID from mob_groups
  
      bool IsFarFromHome();      // check if mob is too far from spawn
      bool CanBeNeutral() const; // check if mob can have killing pause
-@@ -262,6 +263,7 @@ public:
+@@ -216,6 +217,7 @@ public:
  
-     uint32 m_flags;       // includes the CFH flag and whether the HP bar should be shown or not (e.g. Yilgeban doesnt)
-     uint8  m_name_prefix; // The ding bats VS Ding bats
-+    uint32 m_GroupID = 0; // mobgroup ID within zone
+     xi::EntityFlags m_flags;       // includes the CFH flag and whether the HP bar should be shown or not (e.g. Yilgeban doesnt)
+     uint8           m_name_prefix; // The ding bats VS Ding bats
++    uint32          m_GroupID = 0; // mobgroup ID within zone
  
-     uint8 m_unk0; // possibly campaign related (entity 0x24)
-     uint8 m_unk1; // (entity_update 0x25)
+     bool m_CallForHelpBlocked;
+ 
 diff --git a/src/map/lua/lua_base_entity.cpp b/src/map/lua/lua_base_entity.cpp
-index f8017d119f..f78f43ce29 100644
+index d203a31d4b..d730268e31 100644
 --- a/src/map/lua/lua_base_entity.cpp
 +++ b/src/map/lua/lua_base_entity.cpp
-@@ -19306,6 +19306,24 @@ uint32 CLuaBaseEntity::getPool()
+@@ -19470,6 +19470,24 @@ uint32 CLuaBaseEntity::getPool()
      return 0;
  }
  
@@ -63,7 +67,7 @@ index f8017d119f..f78f43ce29 100644
  /************************************************************************
   *  Function: getDropID()
   *  Purpose : Returns the integer Drop ID assigned to a Mob
-@@ -20991,6 +21009,7 @@ void CLuaBaseEntity::Register()
+@@ -21161,6 +21179,7 @@ void CLuaBaseEntity::Register()
      SOL_REGISTER("tryHitInterrupt", CLuaBaseEntity::tryHitInterrupt);
  
      SOL_REGISTER("getPool", CLuaBaseEntity::getPool);
@@ -72,35 +76,37 @@ index f8017d119f..f78f43ce29 100644
      SOL_REGISTER("setDropID", CLuaBaseEntity::setDropID);
      SOL_REGISTER("addTreasure", CLuaBaseEntity::addTreasure);
 diff --git a/src/map/lua/lua_base_entity.h b/src/map/lua/lua_base_entity.h
-index b698fc5527..4e36a34687 100644
+index 29b903630d..b8be9d4452 100644
 --- a/src/map/lua/lua_base_entity.h
 +++ b/src/map/lua/lua_base_entity.h
-@@ -940,6 +940,7 @@ public:
+@@ -947,7 +947,8 @@ public:
+     void untargetableAndUnactionable(uint32 milliseconds);
      void tryHitInterrupt(CLuaBaseEntity* attacker);
  
-     uint32 getPool(); // Returns a mobs pool ID. If entity is not a mob, returns nil.
+-    uint32 getPool(); // Returns a mobs pool ID. If entity is not a mob, returns nil.
++    uint32 getPool();    // Returns a mobs pool ID. If entity is not a mob, returns nil.
 +    uint32 getGroupId(); // Returns a mobs group ID from mob_groups. Returns 0 if not available.
      uint32 getDropID();
      void   setDropID(uint32 dropID);
      void   addTreasure(uint16 itemID, const sol::object& arg1, const sol::object& arg2);
 diff --git a/src/map/utils/zoneutils.cpp b/src/map/utils/zoneutils.cpp
-index 62631d3640..4952922dc0 100644
+index 31ede9865c..e149f431f8 100644
 --- a/src/map/utils/zoneutils.cpp
 +++ b/src/map/utils/zoneutils.cpp
-@@ -424,7 +424,7 @@ auto LoadMOBList(Scheduler& scheduler, const std::vector<uint16>& zoneIds) -> Ta
+@@ -434,7 +434,7 @@ auto LoadMOBList(Scheduler& scheduler, const std::vector<xi::ZoneId>& zoneIds) -
                                             "fire_res_rank, ice_res_rank, wind_res_rank, earth_res_rank, lightning_res_rank, water_res_rank, light_res_rank, dark_res_rank, "
-                                            "paralyze_res_rank, bind_res_rank, silence_res_rank, slow_res_rank, poison_res_rank, light_sleep_res_rank, dark_sleep_res_rank, blind_res_rank, "
+                                            "paralyze_res_rank, bind_res_rank, silence_res_rank, slow_res_rank, poison_res_rank, light_sleep_res_rank, dark_sleep_res_rank, blind_res_rank, stun_res_rank, gravity_res_rank, "
                                             "Element, mob_pools.speciesid, mob_species_system.familyID, name_prefix, entityFlags, animationsub, "
 -                                           "(mob_species_system.HP / 100), (mob_species_system.MP / 100), spellList, mob_groups.poolid, "
 +                                           "(mob_species_system.HP / 100), (mob_species_system.MP / 100), spellList, mob_groups.poolid, mob_groups.groupid AS mobgroupid, "
                                             "allegiance, namevis, aggro, roamflag, mob_pools.skill_list_id, mob_pools.true_detection, mob_species_system.detects, "
                                             "mob_species_system.charmable, mob_groups.content_tag, "
                                             "mob_pools.modelSize, mob_pools.modelHitboxSize, "
-@@ -472,6 +472,7 @@ auto LoadMOBList(Scheduler& scheduler, const std::vector<uint16>& zoneIds) -> Ta
+@@ -482,6 +482,7 @@ auto LoadMOBList(Scheduler& scheduler, const std::vector<xi::ZoneId>& zoneIds) -
                                      PMob->m_RespawnTime = std::chrono::seconds(rset->get<uint32>("respawntime"));
-                                     PMob->m_SpawnType   = rset->get<SPAWNTYPE>("spawntype");
+                                     PMob->m_SpawnType   = rset->get<xi::SpawnType>("spawntype");
                                      PMob->m_DropID      = rset->get<uint32>("dropid");
 +                                    PMob->m_GroupID     = rset->get<uint32>("mobgroupid");
  
-                                     // Check if the drop list is valid
-                                     if (PMob->m_DropID != 0 && itemutils::GetDropList(PMob->m_DropID) == nullptr)
+                                     if (!rset->isNull("spawnHour") && !rset->isNull("despawnHour"))
+                                     {

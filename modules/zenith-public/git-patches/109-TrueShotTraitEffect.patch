@@ -1,8 +1,8 @@
-diff --git a/scripts/globals/combat/physical_utilities.lua b/scripts/globals/combat/physical_utilities.lua
-index ec5b8b1231..438cb20044 100644
---- a/scripts/globals/combat/physical_utilities.lua
-+++ b/scripts/globals/combat/physical_utilities.lua
-@@ -907,7 +907,11 @@ xi.combat.physical.calculateRangedPDIF = function(actor, target, weaponType, wsA
+diff --git a/scripts/combat/physical_utilities.lua b/scripts/combat/physical_utilities.lua
+index 126aacdc55..402569fe05 100644
+--- a/scripts/combat/physical_utilities.lua
++++ b/scripts/combat/physical_utilities.lua
+@@ -908,7 +908,11 @@ xi.combat.physical.calculateRangedPDIF = function(actor, target, weaponType, wsA
          pDif = pDif * 1.25
      end
  

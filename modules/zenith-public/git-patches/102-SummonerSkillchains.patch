@@ -4,10 +4,18 @@ This variable is used to determine if a mob has been interacted with for skillch
 This patch abuses that variable and sets it to false if the pet has a player owner and that owner does not have avatar's favor active
 ---
 diff --git a/src/map/entities/pet_entity.cpp b/src/map/entities/pet_entity.cpp
-index fb85d967f6..f079c266d8 100644
+index a65ef61e01..bad7ff7d80 100644
 --- a/src/map/entities/pet_entity.cpp
 +++ b/src/map/entities/pet_entity.cpp
-@@ -495,8 +495,15 @@ void CPetEntity::OnPetSkillFinished(CPetSkillState& state, action_t& action)
+@@ -29,6 +29,7 @@
+ #include "ai/states/petskill_state.h"
+ #include "data/enums/mob_mod.h"
+ #include "packets/pet_sync.h"
++#include "status_effect_container.h"
+ #include "utils/battleutils.h"
+ #include "utils/messageutils.h"
+ #include "utils/mobutils.h"
+@@ -499,7 +500,14 @@ void CPetEntity::OnPetSkillFinished(CPetSkillState& state, action_t& action)
      MsgBasic msg            = MsgBasic::None;
      MsgBasic defaultMessage = PSkill->getMsg();
  
@@ -23,4 +31,3 @@ index fb85d967f6..f079c266d8 100644
      for (auto&& PTargetFound : PAI->TargetFind->m_targets)
      {
          action_target_t& actionTarget = action.addTarget(PTargetFound->id);
-         action_result_t& actionResult = actionTarget.addResult();
