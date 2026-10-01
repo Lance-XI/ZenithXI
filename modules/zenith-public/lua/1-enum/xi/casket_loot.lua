@@ -10,6 +10,15 @@ local m = Module:new('e-x_casketLoot')
 m:addOverride('xi.dummyFunc', function()
 end)
 
+-- Two ids this table needs are not in the base xi.item enum. 1-enum/xi/item.lua
+-- declares them, but module files load in sorted path order and
+-- 'casket_loot.lua' sorts before 'item.lua', so they are still nil while the
+-- table below is built -- every entry using them would end up with itemId = nil
+-- (an [ERROR] nil item on every casket open, plus a silently empty slot).
+-- Declaring them here is idempotent: item.lua later assigns the same values.
+xi.item.COEURL_WHISKER = xi.item.COEURL_WHISKER or 927
+xi.item.LEATHER_POUCH = xi.item.LEATHER_POUCH or 1655
+
 xi.casket_loot.casketItems =
 {
     [xi.zone.WEST_RONFAURE] =
@@ -805,7 +814,7 @@ xi.casket_loot.casketItems =
         },
         items =
         {
-            { itemId = xi.item.TIGER_COD,                    weight = 4000 },
+            { itemId = xi.item.TIGER_COD_1,                  weight = 4000 },
             { itemId = xi.item.DOLL_SHARD,                   weight = 2000 },
             { itemId = xi.item.TIGER_HIDE,                   weight = 2000 },
             { itemId = xi.item.FROST_TURNIP,                 weight = 3000 },
@@ -964,7 +973,7 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.PINCH_OF_BOMB_ASH,            weight = 2000 },
             { itemId = xi.item.DOGWOOD_LOG,                  weight = 1000 },
             { itemId = xi.item.DANCESHROOM,                  weight = 2000 },
-            { itemId = xi.item.GOLD_LOBSTER,                 weight = 2500 },
+            { itemId = xi.item.GOLD_LOBSTER_1,               weight = 2500 },
             { itemId = xi.item.PHOENIX_FEATHER,                weight = 50 },
             { itemId = xi.item.PINCH_OF_DRIED_MUGWORT,       weight = 1500 },
             { itemId = xi.item.HI_POTION,                    weight = 1000 },
@@ -1102,7 +1111,7 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.PINCH_OF_BOMB_ASH,            weight = 2000 },
             { itemId = xi.item.DOGWOOD_LOG,                  weight = 1000 },
             { itemId = xi.item.DANCESHROOM,                  weight = 2000 },
-            { itemId = xi.item.GOLD_LOBSTER,                 weight = 2500 },
+            { itemId = xi.item.GOLD_LOBSTER_1,               weight = 2500 },
             { itemId = xi.item.PHOENIX_FEATHER,                weight = 50 },
             { itemId = xi.item.PINCH_OF_DRIED_MUGWORT,       weight = 1500 },
             { itemId = xi.item.HI_POTION,                    weight = 1000 },
@@ -1662,7 +1671,7 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.PINCH_OF_BOMB_ASH,            weight = 2000 },
             { itemId = xi.item.DOGWOOD_LOG,                  weight = 1000 },
             { itemId = xi.item.DANCESHROOM,                  weight = 2000 },
-            { itemId = xi.item.GOLD_LOBSTER,                 weight = 2500 },
+            { itemId = xi.item.GOLD_LOBSTER_1,               weight = 2500 },
             { itemId = xi.item.PHOENIX_FEATHER,                weight = 50 },
             { itemId = xi.item.PINCH_OF_DRIED_MUGWORT,       weight = 1500 },
             { itemId = xi.item.HI_POTION,                    weight = 1000 },
@@ -2624,8 +2633,8 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.SPIDER_WEB,                      weight = 1750 },
             { itemId = xi.item.PINCH_OF_MINIUM,                  weight = 250 },
             { itemId = xi.item.HANDFUL_OF_DARKSTEEL_BOLT_HEADS, weight = 1500 },
-            { itemId = xi.item.MOAT_CARP,                       weight = 3000 },
-            { itemId = xi.item.THREE_EYED_FISH,                 weight = 2000 },
+            { itemId = xi.item.MOAT_CARP_1,                     weight = 3000 },
+            { itemId = xi.item.THREE_EYED_FISH_1,               weight = 2000 },
             { itemId = xi.item.PHOENIX_FEATHER,                   weight = 50 },
             { itemId = xi.item.SPRIG_OF_MISTLETOE,              weight = 1500 },
             { itemId = xi.item.HI_POTION_P2,                    weight = 1000 },
@@ -2685,8 +2694,8 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.SPIDER_WEB,                      weight = 2000 },
             { itemId = xi.item.PINCH_OF_MINIUM,                  weight = 250 },
             { itemId = xi.item.HANDFUL_OF_DARKSTEEL_BOLT_HEADS, weight = 1500 },
-            { itemId = xi.item.MOAT_CARP,                       weight = 2500 },
-            { itemId = xi.item.THREE_EYED_FISH,                 weight = 2000 },
+            { itemId = xi.item.MOAT_CARP_1,                     weight = 2500 },
+            { itemId = xi.item.THREE_EYED_FISH_1,               weight = 2000 },
             { itemId = xi.item.PHOENIX_FEATHER,                   weight = 50 },
             { itemId = xi.item.SPRIG_OF_MISTLETOE,              weight = 1500 },
             { itemId = xi.item.HI_POTION_P2,                    weight = 1000 },
@@ -4436,7 +4445,7 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.WYVERN_SKULL,                    weight = 750 },
             { itemId = xi.item.HANDFUL_OF_PLATINUM_ARROWHEADS, weight = 1500 },
             { itemId = xi.item.FOREST_CARP,                    weight = 2750 },
-            { itemId = xi.item.GUGRU_TUNA,                     weight = 1750 },
+            { itemId = xi.item.GUGRU_TUNA_1,                   weight = 1750 },
             { itemId = xi.item.PINCH_OF_MINIUM,                  weight = 50 },
             { itemId = xi.item.PERSIKOS,                       weight = 1000 },
             { itemId = xi.item.HI_POTION_P2,                   weight = 1000 },
@@ -4625,7 +4634,7 @@ xi.casket_loot.casketItems =
             { itemId = xi.item.WYVERN_SKULL,                    weight = 750 },
             { itemId = xi.item.HANDFUL_OF_PLATINUM_ARROWHEADS, weight = 1500 },
             { itemId = xi.item.FOREST_CARP,                    weight = 2750 },
-            { itemId = xi.item.GUGRU_TUNA,                     weight = 1750 },
+            { itemId = xi.item.GUGRU_TUNA_1,                   weight = 1750 },
             { itemId = xi.item.PINCH_OF_MINIUM,                  weight = 50 },
             { itemId = xi.item.PERSIKOS,                       weight = 1250 },
             { itemId = xi.item.HI_POTION_P2,                   weight = 1000 },

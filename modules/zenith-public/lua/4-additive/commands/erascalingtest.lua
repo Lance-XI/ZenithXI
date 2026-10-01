@@ -5,6 +5,8 @@
 --       to verify the C++ era scaling patch is working correctly
 -- usage: !erascalingtest [playername]
 -----------------------------------
+require('modules/module_utils')
+-----------------------------------
 ---@type TCommand
 local commandObj = {}
 
@@ -107,6 +109,19 @@ local function getEraScaledMultiplier(level, startValue, endValue)
 end
 
 -----------------------------------
+-- Helper: C++ integer division (truncates toward zero, unlike math.floor)
+-----------------------------------
+local function intDiv(numerator, denominator)
+    local quotient = numerator / denominator
+
+    if quotient >= 0 then
+        return math.floor(quotient)
+    end
+
+    return math.ceil(quotient)
+end
+
+-----------------------------------
 -- Helper: Calculate level-based DEF factor (from C++)
 -----------------------------------
 local function getLevelDefFactor(level)
@@ -170,40 +185,64 @@ end
 -- Helper: Calculate expected DEF and compare
 -----------------------------------
 local function testDEF(player, target, level, vit, actualDef)
+    player:printToPlayer('--- DEF Test (VIT -> DEF) ---', xi.msg.channel.SYSTEM_3)
+
+    -- Counterstance replaces the whole formula (DEF = 1 + VIT/2 + Minne, gear and
+    -- Protect ignored), so the model below simply does not describe that state.
+    if target:hasStatusEffect(xi.effect.COUNTERSTANCE) then
+        player:printToPlayer(
+            '  [SKIP] Counterstance replaces the DEF formula.',
+            xi.msg.channel.SYSTEM_3
+        )
+
+        return true, 0
+    end
+
     local config = eraConfig.playerVitDef
     local vitMultiplier = getEraScaledMultiplier(level, config.start, config.endVal)
     local vitContrib = math.floor(vit * vitMultiplier)
     local levelFactor = getLevelDefFactor(level)
 
-    -- Get the raw DEF mod (gear, traits, effects, etc.)
+    -- Get the raw DEF mod (gear, traits, Protect, etc.)
     local defMod = target:getMod(xi.mod.DEF)
 
-    -- Expected DEF = 8 + levelFactor + vitContrib + mods
-    local expectedBaseDef = 8 + levelFactor + vitContrib
-    local expectedTotalDef = expectedBaseDef + defMod
+    -- Pre-percent DEF = 8 + levelFactor + vitContrib + flat mods
+    local expectedBaseDef = 8 + levelFactor + vitContrib + defMod
+
+    -- The final line of CBattleEntity::DEF() (battle_entity.cpp):
+    --   max(1, DEF + DEF * DEFP / 100 + min(DEF * FOOD_DEFP / 100, FOOD_DEF_CAP))
+    -- Without this, Berserk (-25 DEFP), Last Resort and any DEF food report a
+    -- false mismatch. C++ truncates toward zero, so intDiv, not math.floor.
+    local defPercent = target:getMod(xi.mod.DEFP)
+    local foodPercent = target:getMod(xi.mod.FOOD_DEFP)
+    local foodCap = target:getMod(xi.mod.FOOD_DEF_CAP)
+    local defPercentContrib = intDiv(expectedBaseDef * defPercent, 100)
+    local foodContrib = math.min(intDiv(expectedBaseDef * foodPercent, 100), foodCap)
+
+    local expectedTotalDef = math.max(1, expectedBaseDef + defPercentContrib + foodContrib)
 
     -- Compare actual to expected total (including mods)
     local diff = actualDef - expectedTotalDef
     local passed = math.abs(diff) <= 2 -- Allow small rounding tolerance
 
-    player:printToPlayer('--- DEF Test (VIT -> DEF) ---', xi.msg.channel.SYSTEM_3)
     player:printToPlayer(
         string.format('  VIT: %d | Multiplier: %.3f | VIT contrib: %d',
             vit, vitMultiplier, vitContrib),
         xi.msg.channel.SYSTEM_3
     )
     player:printToPlayer(
-        string.format('  Base=8 + LevelFactor=%d + VITcontrib=%d = %d',
-            levelFactor, vitContrib, expectedBaseDef),
+        string.format('  Base=8 + LevelFactor=%d + VITcontrib=%d + DEFmod=%+d = %d',
+            levelFactor, vitContrib, defMod, expectedBaseDef),
         xi.msg.channel.SYSTEM_3
     )
     player:printToPlayer(
-        string.format('  DEF Mod (gear/traits): %+d', defMod),
+        string.format('  DEFP: %+d%% (%+d) | Food: %+d%% (%+d, cap %d)',
+            defPercent, defPercentContrib, foodPercent, foodContrib, foodCap),
         xi.msg.channel.SYSTEM_3
     )
     player:printToPlayer(
-        string.format('  Expected total: %d + (%+d) = %d | Actual: %d | Diff: %+d',
-            expectedBaseDef, defMod, expectedTotalDef, actualDef, diff),
+        string.format('  Expected total: %d | Actual: %d | Diff: %+d',
+            expectedTotalDef, actualDef, diff),
         xi.msg.channel.SYSTEM_3
     )
 
@@ -218,7 +257,7 @@ local function testDEF(player, target, level, vit, actualDef)
         end
     else
         player:printToPlayer(
-            string.format('  [FAIL] DEF mismatch by %+d (check for missing mods)', diff),
+            string.format('  [FAIL] DEF mismatch by %+d (check for unmodelled mods)', diff),
             xi.msg.channel.SYSTEM_3
         )
     end
@@ -561,4 +600,4 @@ commandObj.onTrigger = function(player, targetName)
     )
 end
 
-return commandObj
+xi.module.registerCommand('erascalingtest', commandObj)

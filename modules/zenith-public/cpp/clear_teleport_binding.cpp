@@ -40,8 +40,9 @@ class ClearTeleportBindingModule : public CPPModule
     {
         TracyZoneScoped;
 
+        // ::lua, not the CPPModule::lua member: the member is bound during static init, before ::lua is initialised
         // Lua: target:clearTeleport(teleType, [bitval])
-        lua["CBaseEntity"]["clearTeleport"] = [](CLuaBaseEntity* PLuaEntity, uint8 teleType, sol::object const& bitvalObj) -> void
+        ::lua["CBaseEntity"]["clearTeleport"] = [](CLuaBaseEntity* PLuaEntity, uint8 teleType, const sol::object& bitvalObj) -> void
         {
             TracyZoneScoped;
 

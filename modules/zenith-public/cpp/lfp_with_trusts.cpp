@@ -37,9 +37,10 @@ class LfpWithTrustsModule : public CPPModule
     {
         TracyZoneScoped;
 
+        // ::lua, not the CPPModule::lua member: the member is bound during static init, before ::lua is initialised
         // Bind setSeekingParty as a method on CBaseEntity
         // Usage: player:setSeekingParty(true/false)
-        lua["CBaseEntity"]["setSeekingParty"] = [](CLuaBaseEntity* PLuaEntity, bool value) -> bool
+        ::lua["CBaseEntity"]["setSeekingParty"] = [](CLuaBaseEntity* PLuaEntity, bool value) -> bool
         {
             TracyZoneScoped;
 

@@ -1,17 +1,31 @@
 Excavation: let Field/gathering gear reduce pickaxe break chance.
-No EXCAVATION_RESULT mod exists, so point the EXCAVATION HELM type at
-MINING_RESULT (which the Field set grants). xi.helm.doesToolBreak reads
-info.mod, so this lowers tool-break chance while digging. Yield is unaffected.
+
+Retargeted for the upstream HELM rework. The old version edited
+scripts/globals/hobbies/helm/data.lua, whose per-type `mod` field no longer
+exists; break-reducing mods now live in the file-local `breakMods` table in
+scripts/globals/hobbies/helm/logic.lua, and upstream leaves Excavation out of
+it (`[xi.helmType.EXCAVATION] = nil`).
+
+There is still no EXCAVATION_RESULT mod, so point Excavation at the mining pair
+the Field set already grants: MINING_RESULT_NQ (515) and MINING_RESULT_HQ (300),
+which replaced the removed MINING_RESULT. Both are required: doesToolBreak only
+applies a reduction when `mods[1] and mods[2]` are both set, so granting the NQ
+mod alone would be a no-op.
+
+Break chance only; yield is unaffected. Be aware the reworked formula is
+multiplicative (0.893^nq * 0.843^hq) rather than additive, so a full Field set is
+a substantially larger reduction than the pre-rework version delivered.
 ---
-diff --git a/scripts/globals/hobbies/helm/data.lua b/scripts/globals/hobbies/helm/data.lua
---- a/scripts/globals/hobbies/helm/data.lua
-+++ b/scripts/globals/hobbies/helm/data.lua
-@@ -341,7 +341,7 @@
-     {
-         id           = 'EXCAVATION',
-         animation    = xi.emote.EXCAVATION,
--        mod          = nil,
-+        mod          = xi.mod.MINING_RESULT,
-         settingRate  = xi.settings.main.EXCAVATION_RATE,
-         settingBreak = xi.settings.main.EXCAVATION_BREAK_CHANCE,
-         message      = 'MINING_IS_POSSIBLE_HERE',
+diff --git a/scripts/globals/hobbies/helm/logic.lua b/scripts/globals/hobbies/helm/logic.lua
+index e6f2e80cba..57d95be483 100644
+--- a/scripts/globals/hobbies/helm/logic.lua
++++ b/scripts/globals/hobbies/helm/logic.lua
+@@ -41,7 +41,7 @@ local breakMods =
+     [xi.helmType.HARVESTING] = { xi.mod.HARVESTING_RESULT_NQ, xi.mod.HARVESTING_RESULT_HQ },
+     [xi.helmType.LOGGING]    = { xi.mod.LOGGING_RESULT_NQ, xi.mod.LOGGING_RESULT_HQ },
+     [xi.helmType.MINING]     = { xi.mod.MINING_RESULT_NQ, xi.mod.MINING_RESULT_HQ },
+-    [xi.helmType.EXCAVATION] = nil,
++    [xi.helmType.EXCAVATION] = { xi.mod.MINING_RESULT_NQ, xi.mod.MINING_RESULT_HQ },
+ }
+ 
+ local function getDropWeight(player, zoneId, zoneInfo, drop)

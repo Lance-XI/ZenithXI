@@ -4,18 +4,28 @@
 -- This module allows customizing HELM (Harvesting, Excavation, Logging, Mining)
 -- item pools and success/break rates on a per-zone basis.
 --
+-- The configuration is written into xi.helm.dataTable at server start; the base
+-- xi.helm.onTrade keeps running unchanged. Do NOT reintroduce an onTrade override:
+-- base owns the minLevel gate, the Mount Zhayolm daily cap, the shared depletion
+-- pools, the camp penalty ([HELM]PositionIndex), the per-type relocateRate /
+-- respawnTime and the ENABLE_HELM_WAIT delay, and a replacement silently drops
+-- all of them.
+--
 -- Configuration options per zone:
---   rate           - Override success rate (1-100%)
---   breakChance    - Override tool break chance (1-100%)
+--   rate           - Override the retail obtainRate (percent, floats allowed)
+--   breakChance    - Override the retail breakRate (percent, floats allowed)
 --   drops          - Replace the entire drop table for this zone
 --   additionalDrops - Add items to the existing drop pool
 --   additionalDrops<EXPANSION> - Add items to the pool only when the matching
 --                     ENABLE_<EXPANSION> server setting is active (e.g.
 --                     additionalDropsABYSSEA gates on xi.settings.main.ENABLE_ABYSSEA).
 --                     This mirrors the stock<EXPANSION> convention in vendorOverrides.lua
---                     and is intentionally keyed off ENABLE_<X> (not isContentEnabled),
---                     so post-era items auto-disable until their expansion is enabled
---                     without hand-editing this module.
+--                     and is intentionally keyed off ENABLE_<X> (not xi.pre), so post-era
+--                     items auto-disable until their expansion is enabled without
+--                     hand-editing this module.
+--
+-- Anything a zone does not set keeps the retail-captured base value, so omitting
+-- rate/breakChance is the accurate choice unless a deliberate server tweak is wanted.
 --
 -- Example configuration:
 --   [xi.helmType.MINING] =
@@ -587,7 +597,7 @@ local config =
             },
         },
 
-                [xi.zone.FORT_KARUGO_NARUGO_S] =
+        [xi.zone.FORT_KARUGO_NARUGO_S] =
         {
             breakChance = 10,
             drops =
@@ -810,22 +820,6 @@ local config =
 }
 
 -----------------------------------
--- COLORED ROCKS ARRAY
--- (replicated from base logic.lua for RED_ROCK handling)
------------------------------------
-local rocks =
-{
-    [xi.element.FIRE   ] = xi.item.RED_ROCK,
-    [xi.element.ICE    ] = xi.item.TRANSLUCENT_ROCK,
-    [xi.element.WIND   ] = xi.item.GREEN_ROCK,
-    [xi.element.EARTH  ] = xi.item.YELLOW_ROCK,
-    [xi.element.THUNDER] = xi.item.PURPLE_ROCK,
-    [xi.element.WATER  ] = xi.item.BLUE_ROCK,
-    [xi.element.LIGHT  ] = xi.item.WHITE_ROCK,
-    [xi.element.DARK   ] = xi.item.BLACK_ROCK,
-}
-
------------------------------------
 -- HELPER FUNCTIONS
 -----------------------------------
 
@@ -882,148 +876,96 @@ local function applyExpansionDrops(drops, zoneConfig)
     return drops
 end
 
--- Get the effective drop table for a zone
-local function getEffectiveDrops(info, zoneId, zoneConfig)
-    local drops = zoneConfig.drops or info.zone[zoneId].drops
+-- Build the effective drop table for a zone from the untouched base table
+local function getEffectiveDrops(baseDrops, zoneConfig)
+    local drops = zoneConfig.drops or baseDrops
 
     if zoneConfig.additionalDrops then
         drops = mergeDrops(drops, zoneConfig.additionalDrops)
     end
 
-    drops = applyExpansionDrops(drops, zoneConfig)
-
-    return drops
+    return applyExpansionDrops(drops, zoneConfig)
 end
 
--- Custom tool break check with zone-specific chance
-local function doesToolBreakCustom(player, info, zoneConfig)
-    local roll = math.random(1, 100)
-    local mod = info.mod
+-----------------------------------
+-- CONFIGURATION APPLICATION
+-----------------------------------
 
-    if mod then
-        roll = roll + (player:getMod(mod) / 10)
+-- Pristine base drop tables, captured before the first merge so re-applying a zone
+-- through the utility API below never stacks additionalDrops on top of itself.
+local baseDropTables = {}
+
+local function getBaseDrops(zoneData, helmType, zoneId)
+    if not baseDropTables[helmType] then
+        baseDropTables[helmType] = {}
     end
 
-    local breakChance = zoneConfig.breakChance or info.settingBreak
-
-    if roll <= breakChance then
-        player:tradeComplete()
-        return true
+    if not baseDropTables[helmType][zoneId] then
+        baseDropTables[helmType][zoneId] = zoneData.drops
     end
 
-    return false
+    return baseDropTables[helmType][zoneId]
 end
 
--- Custom item picker with zone-specific drops and rate
-local function pickItemCustom(player, info, zoneId, zoneConfig)
-    local rate = zoneConfig.rate or info.settingRate
+-- Write one zone's configuration into xi.helm.dataTable.
+-- Returns false when the base has no data for that helm type / zone pair.
+local function applyZoneConfig(helmType, zoneId)
+    local info       = xi.helm.dataTable and xi.helm.dataTable[helmType]
+    local zoneData   = info and info.zone[zoneId]
+    local zoneConfig = getZoneConfig(helmType, zoneId)
 
-    if math.random(1, 100) > rate then
-        return 0
+    if not zoneData or not zoneConfig then
+        return false
     end
 
-    local drops = getEffectiveDrops(info, zoneId, zoneConfig)
+    zoneData.drops = getEffectiveDrops(getBaseDrops(zoneData, helmType, zoneId), zoneConfig)
 
-    local sum = 0
-    for i = 1, #drops do
-        sum = sum + drops[i][1]
+    -- obtainRate and breakRate are retail-captured floats; only replace them when
+    -- the zone config carries a deliberate server-side value.
+    if zoneConfig.rate then
+        zoneData.obtainRate = zoneConfig.rate
     end
 
-    local item = 0
-    local pick = math.random(1, sum)
-    sum = 0
-
-    for i = 1, #drops do
-        sum = sum + drops[i][1]
-        if sum >= pick then
-            item = drops[i][2]
-            break
-        end
+    if zoneConfig.breakChance then
+        zoneData.breakRate = zoneConfig.breakChance
     end
 
-    if item == xi.item.RED_ROCK then
-        item = rocks[VanadielDayElement()]
-    end
-
-    return item
-end
-
--- Move point helper (replicated from base logic.lua)
-local function doMove(npc, x, y, z)
-    return function(entity)
-        entity:setPos(x, y, z, 0)
-    end
-end
-
-local function movePoint(player, npc, zoneId, info)
-    local points = info.zone[zoneId].points
-    local point = points[math.random(1, #points)]
-
-    npc:hideNPC(120)
-    npc:queue(3000, doMove(npc, unpack(point)))
+    return true
 end
 
 -----------------------------------
 -- OVERRIDES
 -----------------------------------
 
-m:addOverride('xi.helm.onTrade', function(player, npc, trade, helmType, csid, func)
-    local info = xi.helm.dataTable[helmType]
-    local zoneId = player:getZoneID()
-    local zoneConfig = getZoneConfig(helmType, zoneId)
+-- Applied at server start, once scripts/globals/hobbies/helm/data.lua has built
+-- xi.helm.dataTable. Nothing here replaces base behaviour: only the per-zone drop
+-- table, obtain rate and break rate are rewritten.
+m:addOverride('xi.server.onServerStart', function()
+    super()
 
-    if not zoneConfig then
-        super(player, npc, trade, helmType, csid, func)
-        return
-    end
+    local zoneCount = 0
 
-    player:delStatusEffect(xi.effect.INVISIBLE)
-
-    if trade:hasItemQty(info.tool, 1) and trade:getItemCount() == 1 then
-        local itemID = pickItemCustom(player, info, zoneId, zoneConfig)
-        local broke = doesToolBreakCustom(player, info, zoneConfig) and 1 or 0
-        local full = (player:getFreeSlotsCount() == 0) and 1 or 0
-
-        -- Cutscene plays the emote in all zones but Adoulin.
-        -- Adoulin uses emote packets.
-        if csid then
-            player:sendEmote(npc, info.animation, xi.emoteMode.MOTION, true)
-            player:startEvent(csid, itemID, broke, full)
-        else
-            player:sendEmote(npc, info.animation, xi.emoteMode.MOTION, false)
-        end
-
-        if xi.wotg.helpers.helmTrade(player, helmType, broke) then
-            return
-        end
-
-        if full == 1 then
-            itemID = 0
-        end
-
-        if itemID ~= 0 then
-            player:addItem(itemID)
-
-            local uses = (npc:getLocalVar('uses') - 1) % 4
-            npc:setLocalVar('uses', uses)
-
-            if uses == 0 then
-                movePoint(player, npc, zoneId, info)
+    for helmType, zoneConfigs in pairs(config) do
+        for zoneId in pairs(zoneConfigs) do
+            if applyZoneConfig(helmType, zoneId) then
+                zoneCount = zoneCount + 1
+            else
+                printf('[helm_config] Warning: no base HELM data for type %d zone %d, skipping zone override.', helmType, zoneId)
             end
         end
+    end
 
-        xi.helm.result(player, helmType, broke, itemID)
-
-        if type(func) == 'function' then
-            func(player)
-        end
-    else
-        player:messageSpecial(zones[zoneId].text[info.message], info.tool)
+    if zoneCount > 0 then
+        printf('[helm_config] Applied %d HELM zone override(s).', zoneCount)
     end
 end)
 
 -----------------------------------
 -- UTILITY API
+--
+-- The setters re-apply the zone immediately, so a runtime change lands in
+-- xi.helm.dataTable instead of waiting for the next server start. They return
+-- false when the base has no data for that helm type / zone pair.
 -----------------------------------
 
 xi.helmConfig = xi.helmConfig or {}
@@ -1037,69 +979,57 @@ xi.helmConfig.getZoneConfig = function(helmType, zoneId)
     return getZoneConfig(helmType, zoneId)
 end
 
+-- Make sure config[helmType][zoneId] exists so a setter can write into it
+local function ensureZoneConfig(helmType, zoneId)
+    if not config[helmType] then
+        config[helmType] = {}
+    end
+
+    if not config[helmType][zoneId] then
+        config[helmType][zoneId] = {}
+    end
+
+    return config[helmType][zoneId]
+end
+
 xi.helmConfig.setZoneConfig = function(helmType, zoneId, zoneConfig)
     if not config[helmType] then
         config[helmType] = {}
     end
 
     config[helmType][zoneId] = zoneConfig
-    return true
+
+    return applyZoneConfig(helmType, zoneId)
 end
 
 xi.helmConfig.setZoneRate = function(helmType, zoneId, rate)
-    if not config[helmType] then
-        config[helmType] = {}
-    end
+    ensureZoneConfig(helmType, zoneId).rate = rate
 
-    if not config[helmType][zoneId] then
-        config[helmType][zoneId] = {}
-    end
-
-    config[helmType][zoneId].rate = rate
-    return true
+    return applyZoneConfig(helmType, zoneId)
 end
 
 xi.helmConfig.setZoneBreakChance = function(helmType, zoneId, breakChance)
-    if not config[helmType] then
-        config[helmType] = {}
-    end
+    ensureZoneConfig(helmType, zoneId).breakChance = breakChance
 
-    if not config[helmType][zoneId] then
-        config[helmType][zoneId] = {}
-    end
-
-    config[helmType][zoneId].breakChance = breakChance
-    return true
+    return applyZoneConfig(helmType, zoneId)
 end
 
 xi.helmConfig.addZoneDrop = function(helmType, zoneId, weight, itemId)
-    if not config[helmType] then
-        config[helmType] = {}
+    local zoneConfig = ensureZoneConfig(helmType, zoneId)
+
+    if not zoneConfig.additionalDrops then
+        zoneConfig.additionalDrops = {}
     end
 
-    if not config[helmType][zoneId] then
-        config[helmType][zoneId] = {}
-    end
+    table.insert(zoneConfig.additionalDrops, { weight, itemId })
 
-    if not config[helmType][zoneId].additionalDrops then
-        config[helmType][zoneId].additionalDrops = {}
-    end
-
-    table.insert(config[helmType][zoneId].additionalDrops, { weight, itemId })
-    return true
+    return applyZoneConfig(helmType, zoneId)
 end
 
 xi.helmConfig.setZoneDrops = function(helmType, zoneId, drops)
-    if not config[helmType] then
-        config[helmType] = {}
-    end
+    ensureZoneConfig(helmType, zoneId).drops = drops
 
-    if not config[helmType][zoneId] then
-        config[helmType][zoneId] = {}
-    end
-
-    config[helmType][zoneId].drops = drops
-    return true
+    return applyZoneConfig(helmType, zoneId)
 end
 
 return m

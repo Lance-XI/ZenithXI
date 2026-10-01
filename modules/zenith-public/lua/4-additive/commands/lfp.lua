@@ -5,6 +5,8 @@
 -- [ZENITH MOD] This command allows players to toggle their LFP status even
 -- when trusts are deployed, working around the client-side restriction.
 -----------------------------------
+require('modules/module_utils')
+-----------------------------------
 ---@type TCommand
 local commandObj = {}
 
@@ -32,4 +34,4 @@ commandObj.onTrigger = function(player)
     end
 end
 
-return commandObj
+xi.module.registerCommand('lfp', commandObj)

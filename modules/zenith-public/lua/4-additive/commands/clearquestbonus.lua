@@ -4,6 +4,8 @@
 --       Used for testing the repeatableQuestDoubleRewards module.
 --       If no player name is provided, uses cursor target or self.
 -----------------------------------
+require('modules/module_utils')
+-----------------------------------
 ---@type TCommand
 local commandObj = {}
 
@@ -75,4 +77,4 @@ commandObj.onTrigger = function(player, targetName)
     end
 end
 
-return commandObj
+xi.module.registerCommand('clearquestbonus', commandObj)

@@ -27,6 +27,8 @@
 --         !outpost reset ronfaure                   Lock ronfaure across all nations, cursor/self
 --         !outpost check Bob                        Check Bob across all nations
 -----------------------------------
+require('modules/module_utils')
+-----------------------------------
 ---@type TCommand
 local commandObj = {}
 
@@ -342,4 +344,4 @@ commandObj.onTrigger = function(player, action, arg1, arg2, arg3)
     end
 end
 
-return commandObj
+xi.module.registerCommand('outpost', commandObj)

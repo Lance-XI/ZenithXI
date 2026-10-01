@@ -6,14 +6,14 @@
 -- Players can trade a Fire Cluster to open the wall.
 -- -----------------------------------
 
-local m = Module:new('ice_wall_quest')
+local m = Module:new('c_ice_wall_quest')
 
 local ID = zones[xi.zone.ULEGUERAND_RANGE]
 local npcName = 'Ice Wall'
 local checkWaterfall = function(player)
     local waterfall = GetNPCByID(ID.npc.WATERFALL)
 
-    local waterfallOpen = waterfall:getAnimation() ~= xi.anim.OPEN_DOOR
+    local waterfallOpen = waterfall:getAnimation() ~= xi.animation.OPEN_DOOR
 
     if not waterfallOpen then
         player:fmt('{} : The path is currently clear!', npcName)
@@ -25,7 +25,7 @@ end
 local openWaterfall = function(player)
     -- can't just use :openDoor(30) because we need to check the weather before closing it
     local waterfall = GetNPCByID(ID.npc.WATERFALL)
-    waterfall:setAnimation(xi.anim.OPEN_DOOR)
+    waterfall:setAnimation(xi.animation.OPEN_DOOR)
 
     -- close door after 30s, unless weather changed in that time
     waterfall:timer(30000, function(npcArg)
@@ -36,7 +36,7 @@ local openWaterfall = function(player)
         (weather == xi.weather.SNOW or
         weather == xi.weather.BLIZZARDS)
         then
-            npcArg:setAnimation(xi.anim.CLOSE_DOOR)
+            npcArg:setAnimation(xi.animation.CLOSE_DOOR)
         end
     end)
 

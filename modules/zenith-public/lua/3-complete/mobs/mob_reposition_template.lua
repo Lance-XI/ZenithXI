@@ -3,10 +3,24 @@
 --
 -- This module overrides the default spawn points
 -- for the chosen mob groups.
+--
+-- NOTE: `pos` overrides no longer work for mobs that are placed by a roam
+-- region instead of a fixed point. `CMobEntity::Spawn()` re-rolls a random
+-- point inside the mob's region on every life and writes it straight into
+-- m_SpawnPoint, which discards anything `setSpawn()` put there. Every
+-- Bibiki Bay spawn is region placed (310 spawns, 310 `region:` keys, 0
+-- `pos:` keys in data/zones/bibiki_bay/mobs.yaml), so the Locus_Camelopard
+-- and Locus_Hypnos_Eft position overrides that used to live here were dead
+-- and have been removed. There is no Lua binding for roam regions -
+-- `setRoamRegions()` is C++ only - so a region placed mob can only be moved
+-- by editing its `region:` in the zone YAML.
+--
+-- `limit` based culling is unaffected: it despawns whole spawn points and
+-- never touches m_SpawnPoint.
 -- -----------------------------------
 
 require('modules/module_utils')
-local m = Module:new('mob_reposition_template')
+local m = Module:new('c-m_reposition_template')
 
 local mobList =
 {
@@ -17,14 +31,6 @@ local mobList =
     ['Locus_Camelopard'] =
     {
         limit = { 4, 7, 11, 13, 17, 18, 22 },
-        pos =
-        {
-            [4] = { x = 634.1308, y = -19.9076, z = 842.1681, rot = 116 },
-            [7] = { x = 634.1308, y = -19.9076, z = 842.1681, rot = 116 },
-            [13] = { x = 546.8382, y = -19.3444, z = 759.1634, rot = 213 },
-            [17] = { x = 546.5234, y = -19.8379, z = 753.1788, rot = 19 },
-            [22] = { x = 554.6318, y = -19.8303, z = 790.6303, rot = 149 },
-        },
     },
     ['Locus_Ghost_Crab'] =
     {
@@ -33,15 +39,6 @@ local mobList =
     ['Locus_Hypnos_Eft'] =
     {
         limit = 6,
-        pos =
-        {
-            [1] = { x = 182.0314, y = -28.1075, z = 481.0372, rot = 197 },
-            [2] = { x = 182.0314, y = -28.1075, z = 481.0372, rot = 197 },
-            [3] = { x = 182.0314, y = -28.1075, z = 481.0372, rot = 197 },
-            [4] = { x = 182.0314, y = -28.1075, z = 481.0372, rot = 197 },
-            [5] = { x = 182.0314, y = -28.1075, z = 481.0372, rot = 197 },
-            [6] = { x = 182.0314, y = -28.1075, z = 481.0372, rot = 197 },
-        }
     },
 }
 

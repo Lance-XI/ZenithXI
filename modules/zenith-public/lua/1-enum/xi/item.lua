@@ -6,7 +6,7 @@
 
 require('modules/module_utils')
 
-local m = Module:new('e_x-item')
+local m = Module:new('e-x_item')
 m:addOverride('xi.dummyFunc', function()
 end)
 
@@ -30,5 +30,13 @@ xi.item.SCARLET_STONE            = 1649
 xi.item.RAFFLESIA_VINE           = 2513
 xi.item.GNAT_WING                = 2522
 xi.item.HEAD_OF_GRAUBERG_LETTUCE = 5688
+
+-- Armor set pieces missing from the base item enum (armor set bonus modules)
+xi.item.CARLINE_RIBBON           = 16127
+xi.item.CARLINE_EARRING          = 15995
+xi.item.BREEDER_MASK             = 16125
+xi.item.BREEDER_MUFFLERS         = 15001
+xi.item.CABALLERO_GAUNTLETS      = 15000
+xi.item.CABALLERO_SHIELD         = 16169
 
 return m

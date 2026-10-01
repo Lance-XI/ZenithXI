@@ -10,10 +10,18 @@ local m = Module:new('c_garrisonTracking')
 -- Structure: charvar name -> list of garrisons (max 32 per var)
 -- Each garrison entry: { zoneId = xi.zone.ZONE_NAME }
 -- Bit position is determined by array index (index 1 = bit 0, etc.)
+--
+-- !! HARD LIMIT: 31 entries per group, not 32 !!
+-- hasCompletedAll() below calls utils.mask.isFull(mask, #garrList), and that
+-- helper computes its full mask as (2 ^ len) - 1. At len = 32 that is the
+-- float 4294967295, which bit.band coerces to -1, so the comparison can never
+-- be true and hasCompletedAll() would return false forever. Before adding a
+-- 32nd entry to any group here, either start a new charvar group or replace
+-- the isFull() call with an explicit per-bit check.
 -----------------------------------
 local garrisonTracking =
 {
-    -- 16 garrison zones fit in one group
+    -- 16 garrison zones fit in one group (see the 31-entry limit above)
     ['WardrobeGarrison_Group1'] =
     {
         { zoneId = xi.zone.NORTH_GUSTABERG },
@@ -173,6 +181,10 @@ end
 xi.garrisonTracking.hasCompletedAll = function(player)
     for charVarName, garrList in pairs(garrisonTracking) do
         local mask = player:getCharVar(charVarName)
+
+        -- Safe only while every group has 31 entries or fewer -- see the
+        -- warning on the garrisonTracking table. utils.mask.isFull is broken
+        -- at len 32 and would make this return false permanently.
         if not utils.mask.isFull(mask, #garrList) then
             return false
         end
