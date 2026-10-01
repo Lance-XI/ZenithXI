@@ -92,13 +92,13 @@ local sharedGuildVendors =
         path    = 'xi.zones.Lower_Jeuno.npcs.Akamafula.onTrigger',
         zone    = xi.zone.LOWER_JEUNO,
         dialog  = 'AKAMAFULA_SHOP_DIALOG',
-        keyItem = xi.ki.TENSHODO_MEMBERS_CARD,
+        keyItem = xi.keyItem.TENSHODO_MEMBERS_CARD,
     },
     {
         path    = 'xi.zones.Lower_Jeuno.npcs.Amalasanda.onTrigger',
         zone    = xi.zone.LOWER_JEUNO,
         dialog  = 'AMALASANDA_SHOP_DIALOG',
-        keyItem = xi.ki.TENSHODO_MEMBERS_CARD,
+        keyItem = xi.keyItem.TENSHODO_MEMBERS_CARD,
     },
 }
 

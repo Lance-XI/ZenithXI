@@ -1,0 +1,27 @@
+Bazaar: charge a 10% tax in every zone.
+
+Replaces modules/zenith-public/sql/bazaarTaxChanges.sql, which did
+`UPDATE zone_settings SET tax = 10.00`. Upstream moved per-zone settings out of
+SQL: zone_settings now holds only zoneid/zoneip/zoneport/name, and tax is read
+from data/zones/<zone>/zone.yaml through xi::data::loadZoneFile, which has no
+module overlay. The old UPDATE now fails with an unknown-column error, and no
+zone.yaml sets `tax`, so every zone would fall back to 0%.
+
+Change the dataset default instead. A zone.yaml that sets its own `tax` still
+wins. CZone::LoadZoneSettings scales it by 100 exactly as the SQL path did, so
+10.0 gives the same +10% bazaar price as the old 10.00 column value.
+---
+diff --git a/src/map/data/datasets/zones/settings/dataset.cpp b/src/map/data/datasets/zones/settings/dataset.cpp
+index bd96437056..3d4e58af1f 100644
+--- a/src/map/data/datasets/zones/settings/dataset.cpp
++++ b/src/map/data/datasets/zones/settings/dataset.cpp
+@@ -256,7 +256,8 @@ auto Dataset::decode(const std::string_view text) -> Records
+         .Type             = yaml::resolveFlags(document.type),
+         .Misc             = yaml::resolveFlags(document.misc),
+         .Music            = convertMusic(document.music),
+-        .Tax              = document.tax.value_or(0.0f),
++        // ZenithXI: zones that do not set a bazaar tax charge 10% rather than none.
++        .Tax              = document.tax.value_or(10.0f),
+         .LevelRestriction = document.level_restriction.value_or(0),
+         .ZoneLines        = convertZoneLines(document.zonelines),
+         .Transports       = convertTransports(document.transport),

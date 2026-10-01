@@ -28,8 +28,8 @@ local protectDefenseValues = {
 }
 
 -- Override the base power calculation for Protect/Protectra spells
-m:addOverride('xi.spells.enhancing.calculateEnhancingBasePower', function(caster, target, spell, spellId, skillLevel, spellParams, dayWeatherBonus)
-    local basePower = super(caster, target, spell, spellId, skillLevel, spellParams, dayWeatherBonus)
+m:addOverride('xi.spells.enhancing.calculateEnhancingBasePower', function(caster, target, spell, spellId, spellEffect)
+    local basePower = super(caster, target, spell, spellId, spellEffect)
 
     -- Check if this is a Protect or Protectra spell and override its base power
     local newDefense = protectDefenseValues[spellId]

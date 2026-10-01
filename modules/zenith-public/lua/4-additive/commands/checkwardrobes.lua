@@ -3,6 +3,8 @@
 -- desc: Checks and awards any pending wardrobe/mog case unlocks for a player
 --       Also displays all completed and available unlocks
 -----------------------------------
+require('modules/module_utils')
+-----------------------------------
 ---@type TCommand
 local commandObj = {}
 
@@ -113,4 +115,4 @@ commandObj.onTrigger = function(player, target)
     end
 end
 
-return commandObj
+xi.module.registerCommand('checkwardrobes', commandObj)

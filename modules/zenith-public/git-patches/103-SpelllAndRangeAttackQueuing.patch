@@ -1,8 +1,21 @@
 diff --git a/src/map/ai/ai_container.cpp b/src/map/ai/ai_container.cpp
-index 447c3983ba..7138187eb6 100644
+index f2b538fd43..41bfa1b1ca 100644
 --- a/src/map/ai/ai_container.cpp
 +++ b/src/map/ai/ai_container.cpp
-@@ -524,6 +524,24 @@ auto CAIContainer::Tick(const timer::time_point tick) -> Task<void>
+@@ -466,6 +466,12 @@ void CAIContainer::Reset()
+     ClearActionQueue();
+     ClearTimerQueue();
+ 
++    // the replay queue is part of that same contract - a shot or spell held from the
++    // previous life must not fire on the next spawn either.
++    m_queuedRangedAttack = EntityId{};
++    m_queuedSpellTarget  = EntityId{};
++    m_queuedSpell        = SpellID{};
++
+     // no Cleanup ran, so clear the engaged flags by hand. Internal_Engage skips anything that still looks engaged, leaving it with nothing to swing with.
+     if (auto* battle = dynamic_cast<CBattleEntity*>(PEntity); battle && battle->animation == xi::Animation::Attack)
+     {
+@@ -549,6 +555,24 @@ auto CAIContainer::Tick(const timer::time_point tick) -> Task<void>
          Inactive(0ms, false);
      }
  
@@ -26,12 +39,12 @@ index 447c3983ba..7138187eb6 100644
 +
      PEntity->PostTick();
  
-     co_return;
+     // nothing is executing now, so the states retired this tick can go.
 diff --git a/src/map/ai/ai_container.h b/src/map/ai/ai_container.h
-index a1aa6a9341..3f7d07d2c6 100644
+index cdaf808be3..584eddf846 100644
 --- a/src/map/ai/ai_container.h
 +++ b/src/map/ai/ai_container.h
-@@ -126,6 +126,12 @@ public:
+@@ -128,6 +128,12 @@ public:
      // pathfinder, not guaranteed to be implemented
      std::unique_ptr<CPathFind> PathFind;
  
