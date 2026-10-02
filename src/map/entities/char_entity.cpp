@@ -165,7 +165,7 @@ CCharEntity::CCharEntity()
     std::memset(&m_PetCommands, 0, sizeof(m_PetCommands));
     std::memset(&m_WeaponSkills, 0, sizeof(m_WeaponSkills));
     std::memset(&m_SetBlueSpells, 0, sizeof(m_SetBlueSpells));
-    std::memset(&m_FieldChocobo, 0, sizeof(m_FieldChocobo));
+    std::memset(&m_chocoboUserData, 0, sizeof(m_chocoboUserData));
     std::memset(&m_unlockedAttachments, 0, sizeof(m_unlockedAttachments));
 
     std::memset(&m_questLog, 0, sizeof(m_questLog));
@@ -901,21 +901,18 @@ bool CCharEntity::hasBazaar()
     }
 
     CItemContainer* playerInventory = getStorage(LOC_INVENTORY);
-
-    if (playerInventory)
+    if (!playerInventory)
     {
-        for (uint8 slotID = 1; slotID <= playerInventory->GetSize(); ++slotID)
-        {
-            CItem* PItem = playerInventory->GetItem(slotID);
-
-            if ((PItem != nullptr) && (PItem->getCharPrice() != 0))
-            {
-                return true;
-                break;
-            }
-        }
+        return false;
     }
-    return false;
+
+    const auto* PListedItem = playerInventory->FindItem(
+        [](CItem* PItem)
+        {
+            return PItem->getCharPrice() != 0;
+        });
+
+    return PListedItem != nullptr;
 }
 
 void CCharEntity::SetName(const std::string& name)
@@ -1410,6 +1407,11 @@ void CCharEntity::OnEngage(CAttackState& state)
 void CCharEntity::OnDisengage(CAttackState& state)
 {
     TracyZoneScopedN("CCharEntity::OnDisengage");
+
+    if (auto* controller = dynamic_cast<CPlayerController*>(PAI->GetController()))
+    {
+        controller->setEngageLockedUntil(timer::now() + state.EngageLockout());
+    }
 
     battleutils::RelinquishClaim(this);
     CBattleEntity::OnDisengage(state);
@@ -2592,19 +2594,19 @@ void CCharEntity::UpdateMoghancement()
     std::array<uint16, 8> elements = { 0 };
     for (auto containerID : { LOC_MOGSAFE, LOC_MOGSAFE2 })
     {
-        CItemContainer* PContainer = getStorage(containerID);
-        for (int slotID = 1; slotID <= PContainer->GetSize(); ++slotID)
-        {
-            CItem* PItem = PContainer->GetItem(slotID);
-            if (PItem != nullptr && PItem->isType(ITEM_FURNISHING))
+        auto* PContainer = getStorage(containerID);
+        PContainer->ForEachItem(
+            [&](CItem* PItem)
             {
-                CItemFurnishing* PFurniture = static_cast<CItemFurnishing*>(PItem);
-                if (PFurniture->isInstalled() && !PFurniture->getOn2ndFloor())
+                if (PItem->isType(ITEM_FURNISHING))
                 {
-                    elements[PFurniture->getElement() - 1] += PFurniture->getAura();
+                    auto* PFurniture = static_cast<CItemFurnishing*>(PItem);
+                    if (PFurniture->isInstalled() && !PFurniture->getOn2ndFloor())
+                    {
+                        elements[PFurniture->getElement() - 1] += PFurniture->getAura();
+                    }
                 }
-            }
-        }
+            });
     }
 
     // Determine the dominant aura
@@ -2633,26 +2635,26 @@ void CCharEntity::UpdateMoghancement()
     {
         for (auto containerID : { LOC_MOGSAFE, LOC_MOGSAFE2 })
         {
-            CItemContainer* PContainer = getStorage(containerID);
-            for (int slotID = 1; slotID <= PContainer->GetSize(); ++slotID)
-            {
-                CItem* PItem = PContainer->GetItem(slotID);
-                if (PItem != nullptr && PItem->isType(ITEM_FURNISHING))
+            auto* PContainer = getStorage(containerID);
+            PContainer->ForEachItem(
+                [&](CItem* PItem)
                 {
-                    CItemFurnishing* PFurniture = static_cast<CItemFurnishing*>(PItem);
-                    // Highest aura wins, ties broken by highest moghancement id.
-                    if (PFurniture->isInstalled() && !PFurniture->getOn2ndFloor() && PFurniture->getElement() == dominantElement)
+                    if (PItem->isType(ITEM_FURNISHING))
                     {
-                        const uint8  aura         = PFurniture->getAura();
-                        const uint16 moghancement = PFurniture->getMoghancement();
-                        if (aura > bestAura || (aura == bestAura && moghancement > newMoghancementID))
+                        auto* PFurniture = static_cast<CItemFurnishing*>(PItem);
+                        // Highest aura wins, ties broken by highest moghancement id.
+                        if (PFurniture->isInstalled() && !PFurniture->getOn2ndFloor() && PFurniture->getElement() == dominantElement)
                         {
-                            bestAura          = aura;
-                            newMoghancementID = moghancement;
+                            const uint8  aura         = PFurniture->getAura();
+                            const uint16 moghancement = PFurniture->getMoghancement();
+                            if (aura > bestAura || (aura == bestAura && moghancement > newMoghancementID))
+                            {
+                                bestAura          = aura;
+                                newMoghancementID = moghancement;
+                            }
                         }
                     }
-                }
-            }
+                });
         }
     }
 

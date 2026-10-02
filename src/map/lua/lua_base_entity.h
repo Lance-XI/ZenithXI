@@ -36,7 +36,6 @@
 
 enum class QuestLog : uint8_t;
 enum class POSMODE : uint8;
-enum class ChocoboColor : uint8_t;
 enum class TerrainType : uint8;
 class CBaseEntity;
 class CCharEntity;
@@ -64,12 +63,12 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const CLuaBaseEntity& entity);
 
     // Messaging System
-    void showText(CLuaBaseEntity* entity, uint16 messageID, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& p4, const sol::object& p5);
+    void showText(CLuaBaseEntity* entity, uint16 messageID, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& p4, const sol::object& p5, const sol::object& messageType);
     void messageText(CLuaBaseEntity* PLuaBaseEntity, uint16 messageID, const sol::object& arg2, const sol::object& arg3);
     void printToPlayer(const std::string& message, const sol::object& messageTypeObj, const sol::object& nameObj);
     void printToArea(const std::string& message, const sol::object& arg1, const sol::object& arg2, const sol::object& arg3, const sol::object& arg4);
     void messageBasic(uint16 messageID, const sol::object& p0, const sol::object& p1, const sol::object& target);
-    void messageName(uint16 messageID, const sol::object& entity, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& chat);
+    void messageName(uint16 messageID, const sol::object& entity, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& chat, const sol::object& sender);
     void messagePublic(uint16 messageID, const CLuaBaseEntity* PEntity, const sol::object& arg2, const sol::object& arg3);
     void messageSpecial(uint16 messageID, sol::variadic_args va);
     void messageSystem(MsgStd messageID, const sol::object& p0, const sol::object& p1);
@@ -819,7 +818,10 @@ public:
 
     auto getPetName() -> const std::string;
     void setPetName(uint8 pType, uint16 value, const sol::object& arg2);
-    void registerChocobo(ChocoboColor color, const sol::table& traits) const;
+    void registerChocobo(const sol::table& chocobo) const;
+    auto getFieldChocobo() const -> sol::object;
+    auto getChocoboUserData() const -> sol::object;
+    void setChocoboUserData(const sol::table& data) const;
 
     void petAttack(CLuaBaseEntity* PEntity);
     void petAbility(uint16 abilityID); // Function exists, but is not implemented.  Warning will be displayed.

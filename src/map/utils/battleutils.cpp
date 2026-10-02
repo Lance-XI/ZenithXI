@@ -1536,15 +1536,19 @@ void HandleEnspell(CBattleEntity* PAttacker, CBattleEntity* PDefender, action_re
         return; // Lambda handled the function
     }
     // check script for grip if main failed
-    else if (PAttacker->objtype == TYPE_PC && static_cast<CCharEntity*>(PAttacker)->getEquip(SLOT_SUB) && weapon == PAttacker->m_Weapons[SLOT_MAIN] &&
-             static_cast<CItemWeapon*>(static_cast<CCharEntity*>(PAttacker)->getEquip(SLOT_SUB))->getSkillType() == xi::SkillType::None &&
-             battleutils::GetScaledItemModifier(PAttacker, static_cast<CCharEntity*>(PAttacker)->getEquip(SLOT_SUB), xi::Mod::ITEM_ADDEFFECT_TYPE) > 0 &&
-             luautils::additionalEffectAttack(PAttacker, PDefender, static_cast<CItemWeapon*>(static_cast<CCharEntity*>(PAttacker)->getEquip(SLOT_SUB)), Action, finaldamage) == 0 &&
-             Action->hasAdditionalEffect())
+    else if (PAttacker->objtype == TYPE_PC && static_cast<CCharEntity*>(PAttacker)->getEquip(SLOT_SUB) && weapon == PAttacker->m_Weapons[SLOT_MAIN])
     {
-        if (Action->addEffectMessage == MsgBasic::AddEffectDamage && Action->addEffectParam < 0)
+        if (auto* PSubWeapon = dynamic_cast<CItemWeapon*>(static_cast<CCharEntity*>(PAttacker)->getEquip(SLOT_SUB));
+            PSubWeapon &&
+            PSubWeapon->getSkillType() == xi::SkillType::None &&
+            GetScaledItemModifier(PAttacker, PSubWeapon, xi::Mod::ITEM_ADDEFFECT_TYPE) > 0 &&
+            luautils::additionalEffectAttack(PAttacker, PDefender, PSubWeapon, Action, finaldamage) == 0 &&
+            Action->hasAdditionalEffect())
         {
-            Action->addEffectMessage = MsgBasic::AddEffectRecoversHP;
+            if (Action->addEffectMessage == MsgBasic::AddEffectDamage && Action->addEffectParam < 0)
+            {
+                Action->addEffectMessage = MsgBasic::AddEffectRecoversHP;
+            }
         }
     }
     else if ((PAttacker->objtype == TYPE_MOB || PAttacker->objtype == TYPE_PET) && static_cast<CMobEntity*>(PAttacker)->getMobMod(xi::MobMod::AddEffect) > 0)
@@ -5771,7 +5775,7 @@ timer::duration CalculateSpellRecastTime(CBattleEntity* PEntity, CSpell* PSpell)
 
     // Apply Haste (Magic and Gear)
     int32 hasteMagic = std::clamp<int32>(PEntity->getMod(xi::Mod::HASTE_MAGIC), -10000, 4375); // 43.75% cap -- handle 100% slow for weakness
-    int32 hasteGear  = std::clamp<int32>(PEntity->getMod(xi::Mod::HASTE_GEAR), -2500, 2500);   // 25%
+    int32 hasteGear  = std::min<int32>(PEntity->getMod(xi::Mod::HASTE_GEAR), 2500);            // 25% haste cap, slow is uncapped
     int32 haste      = hasteMagic + hasteGear;
     recast           = std::chrono::floor<std::chrono::milliseconds>(recast * ((10000.0f - haste) / 10000.0f));
 

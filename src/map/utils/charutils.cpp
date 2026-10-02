@@ -69,6 +69,7 @@
 #include "packets/s2c/0x062_clistatus2.h"
 #include "packets/s2c/0x0ac_command_data.h"
 #include "packets/s2c/0x0ad_dungeon.h"
+#include "packets/s2c/0x0b4_config.h"
 #include "packets/s2c/0x0e0_group_comlink.h"
 #include "packets/s2c/0x119_abil_recast.h"
 
@@ -110,6 +111,7 @@
 #include "itemutils.h"
 #include "job_points.h"
 #include "map_engine.h"
+#include "mountutils.h"
 #include "petutils.h"
 #include "puppetutils.h"
 #include "synthutils.h"
@@ -190,22 +192,13 @@ const std::set traverserStoneReductionKeyItems = {
     xi::KeyItem::IvoryAbyssiteOfCelerity
 };
 
-// Callers reach these from Lua, so validate against the schema before formatting into a query.
-// TODO: Extract this into some sort of database metadata system that's populated on startup.
-auto isCharPointsColumn(const char* type) -> bool
+struct CharPointsQueries
 {
-    static std::unordered_set<std::string> charPointsColumnNames;
-    if (charPointsColumnNames.empty())
-    {
-        const auto names = db::getTableColumnNames("char_points");
-        for (const auto& name : names)
-        {
-            charPointsColumnNames.insert(name);
-        }
-    }
+    std::string select;
+    std::string update;
+};
 
-    return charPointsColumnNames.find(type) != charPointsColumnNames.end();
-}
+HashMap<std::string, CharPointsQueries> charPointsQueries;
 
 } // namespace
 
@@ -805,10 +798,10 @@ auto LoadFromCharUnlocksSQL(CCharEntity* PChar) -> void
 
 auto LoadFromCharPetSQL(CCharEntity* PChar) -> void
 {
-    const auto rset = db::preparedStmt("SELECT field_chocobo FROM char_pet WHERE charid = ?", PChar->id);
+    const auto rset = db::preparedStmt("SELECT chocobo_user_data FROM char_pet WHERE charid = ?", PChar->id);
     if (rset && rset->rowsCount() && rset->next())
     {
-        PChar->m_FieldChocobo = rset->get<uint32>("field_chocobo");
+        db::extractFromBlob(rset, "chocobo_user_data", PChar->m_chocoboUserData);
     }
 }
 
@@ -950,35 +943,22 @@ void LoadFromCharSpellsSQL(CCharEntity* PChar)
     // disable all spells
     PChar->m_SpellList.reset();
 
-    // Compile a list of all enabled expansions
-    std::vector<std::string> enabledExpansions;
+    std::vector<std::string_view> enabledExpansions;
     for (const auto& expansion : { "ROTZ", "COP", "TOAU", "WOTG", "ACP", "AMK", "ASA", "ABYSSEA", "SOA", "ROV", "TVR", "VOIDWATCH" })
     {
         if (luautils::IsContentEnabled(expansion))
         {
-            enabledExpansions.push_back(fmt::format("\"{}\"", expansion));
+            enabledExpansions.emplace_back(expansion);
         }
     }
 
-    std::string condition = "spell_list.content_tag IS NULL";
-
-    if (!enabledExpansions.empty())
-    {
-        condition = fmt::format("spell_list.content_tag IN ({}) OR spell_list.content_tag IS NULL", fmt::join(enabledExpansions, ","));
-    }
-
-    // Select all player spells from enabled expansions
-    //
-    // NOTE: We normally don't want to build a prepared statement with fmt::format,
-    //     : but this query is entirely internal, so it's OK.
-    auto query = fmt::format("SELECT char_spells.spellid "
-                             "FROM char_spells "
-                             "JOIN spell_list "
-                             "ON spell_list.spellid = char_spells.spellid "
-                             "WHERE charid = ? AND ({})",
-                             condition);
-
-    auto rset = db::preparedStmt(query, PChar->id);
+    const auto rset = db::preparedStmt("SELECT char_spells.spellid "
+                                       "FROM char_spells "
+                                       "JOIN spell_list "
+                                       "ON spell_list.spellid = char_spells.spellid "
+                                       "WHERE charid = ? AND (spell_list.content_tag IS NULL OR FIND_IN_SET(spell_list.content_tag, ?))",
+                                       PChar->id,
+                                       fmt::format("{}", fmt::join(enabledExpansions, ",")));
     if (rset && rset->rowsCount())
     {
         while (rset->next())
@@ -2019,6 +1999,12 @@ void UnequipItem(CCharEntity* PChar, uint8 equipSlotID, Recalculate recalculate,
             PChar->updatemask |= UPDATE_HP;
             PChar->updatemask |= UPDATE_LOOK;
         }
+
+        // Racing silks change a personal chocobo's speed while worn; the client reads its own speed from 0x037.
+        if (mountutils::isPersonalChocobo(PChar))
+        {
+            PChar->pushPacket<CCharStatusPacket>(PChar);
+        }
     }
 }
 
@@ -2760,13 +2746,11 @@ void EmptyRecycleBin(CCharEntity* PChar)
 
     CItemContainer* recycleBin = PChar->getStorage(LOC_RECYCLEBIN);
 
-    for (uint8 slotID = 1; slotID <= recycleBin->GetSize(); ++slotID)
-    {
-        if (CItem* PItem = recycleBin->GetItem(slotID))
+    recycleBin->ForEachItem(
+        [&](CItem* PItem)
         {
             luautils::OnItemDrop(PChar, PItem);
-        }
-    }
+        });
 
     db::preparedStmt("DELETE FROM char_inventory WHERE charid = ? AND location = 17", PChar->id);
     recycleBin->Clear();
@@ -2880,45 +2864,35 @@ void LoadJobChangeGear(CCharEntity* PChar)
 
             if (itemId > 0)
             {
+                CItemEquipment* compareItem = nullptr;
+
+                // Get item that theoretically could be equipped an adjacent slot
+                if (equipSlot == SLOT_MAIN || equipSlot == SLOT_EAR1 || equipSlot == SLOT_RING1)
+                {
+                    // Check one item to the "right"
+                    compareItem = PChar->getEquip(static_cast<SLOTTYPE>(equipSlot + 1));
+                }
+                else if (equipSlot == SLOT_SUB || equipSlot == SLOT_EAR2 || equipSlot == SLOT_RING2)
+                {
+                    // Check one item to the "left"
+                    compareItem = PChar->getEquip(static_cast<SLOTTYPE>(equipSlot - 1));
+                }
+
                 for (const auto container : validContainers)
                 {
-                    bool found = false;
+                    auto* PContainer = PChar->getStorage(container);
 
-                    for (uint8 slot = 0; slot < PChar->getStorage(container)->GetSize(); slot++)
-                    {
-                        auto* PEquip = dynamic_cast<CItemEquipment*>(PChar->getStorage(container)->GetItem(slot));
-
-                        // ensure this is the item we actually want from the db
-                        if (PEquip && PEquip->getID() == itemId)
+                    const auto* PEquip = PContainer->FindItem(
+                        [&](CItem* PItem)
                         {
+                            // ensure this is the item we actually want from the db
                             // Validate that we're not trying to equip the same item to two different slots
-                            CItemEquipment* compareItem = nullptr;
+                            return dynamic_cast<CItemEquipment*>(PItem) && PItem->getID() == itemId && PItem != compareItem;
+                        });
 
-                            // Get item that theoretically could be equipped an adjacent slot
-                            if (equipSlot == SLOT_MAIN || equipSlot == SLOT_EAR1 || equipSlot == SLOT_RING1)
-                            {
-                                // Check one item to the "right"
-                                compareItem = PChar->getEquip(static_cast<SLOTTYPE>(equipSlot + 1));
-                            }
-                            else if (equipSlot == SLOT_SUB || equipSlot == SLOT_EAR2 || equipSlot == SLOT_RING2)
-                            {
-                                // Check one item to the "left"
-                                compareItem = PChar->getEquip(static_cast<SLOTTYPE>(equipSlot - 1));
-                            }
-
-                            // If there's no item to compare then this item is valid
-                            // If there is, check they aren't the same via pointer comparison (2 unique copies)
-                            if (!compareItem || (compareItem && compareItem != PEquip))
-                            {
-                                found = true;
-                                charutils::EquipItem(PChar, PEquip->getSlotID(), equipSlot, static_cast<CONTAINER_ID>(container));
-                                break;
-                            }
-                        }
-                    }
-
-                    if (found)
+                    if (PEquip)
                     {
+                        charutils::EquipItem(PChar, PEquip->getSlotID(), equipSlot, static_cast<CONTAINER_ID>(container));
                         break;
                     }
                 }
@@ -3125,13 +3099,19 @@ void EquipItem(CCharEntity* PChar, uint8 slotID, uint8 equipSlotID, uint8 contai
 
     if (equipSlotID == SLOT_MAIN || equipSlotID == SLOT_RANGED || equipSlotID == SLOT_SUB)
     {
+        bool isRangedInstrument = false;
+
         // Instruments and Handbells swapping keeps TP.
         // The outgoing instruments should have saved the TP in UnequipItem before getting here.
-        const bool isRangedInstrument =
-            PItem && PItem->isType(ITEM_EQUIPMENT) &&
-            (static_cast<CItemWeapon*>(PItem)->getSkillType() == xi::SkillType::StringInstrument ||
-             static_cast<CItemWeapon*>(PItem)->getSkillType() == xi::SkillType::WindInstrument ||
-             static_cast<CItemWeapon*>(PItem)->getSkillType() == xi::SkillType::Handbell);
+        if (auto* PRangedInstrument = dynamic_cast<CItemWeapon*>(PChar->getEquip(static_cast<SLOTTYPE>(equipSlotID))); PRangedInstrument)
+        {
+            if (PRangedInstrument->getSkillType() == xi::SkillType::StringInstrument ||
+                PRangedInstrument->getSkillType() == xi::SkillType::WindInstrument ||
+                PRangedInstrument->getSkillType() == xi::SkillType::Handbell)
+            {
+                isRangedInstrument = true;
+            }
+        }
 
         if (equipSucceeded && !isRangedInstrument)
         {
@@ -3153,6 +3133,12 @@ void EquipItem(CCharEntity* PChar, uint8 slotID, uint8 equipSlotID, uint8 contai
 
     PChar->updatemask |= UPDATE_HP;
     PChar->updatemask |= UPDATE_LOOK;
+
+    // Racing silks change a personal chocobo's speed while worn; the client reads its own speed from 0x037.
+    if (mountutils::isPersonalChocobo(PChar))
+    {
+        PChar->pushPacket<CCharStatusPacket>(PChar);
+    }
 
     PChar->setPersist(CharPersist::Equip | CharPersist::Look);
 }
@@ -6542,6 +6528,12 @@ void ReloadParty(CCharEntity* PChar)
             }
 
             PParty->PushMember(PChar);
+
+            // Joins accepted on another process land here instead of CParty::AddMember
+            if (PChar->isSeekingParty())
+            {
+                RemoveSeekFlag(PChar);
+            }
         }
 
         CBattleEntity* PSyncTarget = PChar->PParty->GetSyncTarget();
@@ -6608,17 +6600,24 @@ void ReloadParty(CCharEntity* PChar)
         PChar->ReloadPartyDec();
     }
 
-    // Attempt to disband party if the last trust was just released
-    // NOTE: Trusts are not counted as party members, so the current member count will be 1
-    if (PChar->PParty && PChar->PParty->HasOnlyOneMember() && PChar->PTrusts.empty())
+    // A party that was created with trusts disbands if they get dismissed
+    if (PChar->PParty && PChar->PParty->IsFormedByTrusts() && PChar->PTrusts.empty())
     {
-        // Looks good so far, check OTHER processes to see if we should disband
-        if (PChar->PParty->GetMemberCountAcrossAllProcesses() == 1)
-        {
-            PChar->PParty->DisbandParty();
-            destroy(PChar->PParty);
-        }
+        PChar->PParty->DisbandParty();
     }
+}
+
+void RemoveSeekFlag(CCharEntity* PChar)
+{
+    PChar->playerConfig.InviteFlg = false;
+    PChar->updatemask |= UPDATE_HP;
+
+    SaveCharStats(PChar);
+    SavePlayerSettings(PChar);
+
+    PChar->pushPacket<GP_SERV_COMMAND_CONFIG>(PChar);
+    PChar->pushPacket<CCharStatusPacket>(PChar);
+    PChar->pushPacket<CCharSyncPacket>(PChar);
 }
 
 bool IsAidBlocked(CCharEntity* PInitiator, CCharEntity* PTarget)
@@ -6672,17 +6671,14 @@ void SetPoints(CCharEntity* PChar, const char* type, int32 amount)
 {
     TracyZoneScoped;
 
-    if (!isCharPointsColumn(type))
+    const auto it = charPointsQueries.find(type);
+    if (it == charPointsQueries.end())
     {
         ShowErrorFmt("charutils::SetPoints: Invalid type {} for {}", type, PChar->getName());
         return;
     }
 
-    // NOTE: We normally don't want to build a prepared statement with fmt::format,
-    //     : but this query is entirely internal and we've just validated the incoming
-    //     : column name, so it's OK.
-    const auto query = fmt::format("UPDATE char_points SET {} = ? WHERE charid = ?", type);
-    db::preparedStmt(query, amount, PChar->id);
+    db::preparedStmt(it->second.update, amount, PChar->id);
 
     if (strcmp(type, "spark_of_eminence") == 0)
     {
@@ -6694,21 +6690,36 @@ int32 GetPoints(CCharEntity* PChar, const char* type)
 {
     TracyZoneScoped;
 
-    if (!isCharPointsColumn(type))
+    const auto it = charPointsQueries.find(type);
+    if (it == charPointsQueries.end())
     {
         ShowErrorFmt("charutils::GetPoints: Invalid type {} for {}", type, PChar->getName());
         return 0;
     }
 
-    // char_points is 200 columns wide, so SELECT * bound and fetched all of them to read one.
-    const auto query = fmt::format("SELECT {} FROM char_points WHERE charid = ? LIMIT 1", type);
-    const auto rset  = db::preparedStmt(query, PChar->id);
+    const auto rset = db::preparedStmt(it->second.select, PChar->id);
     if (rset && rset->rowsCount() && rset->next())
     {
-        return rset->get<int32>(type);
+        return rset->get<int32>(0);
     }
 
     return 0;
+}
+
+void LoadCharPointsQueries()
+{
+    charPointsQueries.clear();
+    for (const auto& name : db::getTableColumnNames("char_points"))
+    {
+        if (name != "charid")
+        {
+            charPointsQueries.emplace(name,
+                                      CharPointsQueries{
+                                          .select = fmt::format("SELECT {} FROM char_points WHERE charid = ? LIMIT 1", name),
+                                          .update = fmt::format("UPDATE char_points SET {} = ? WHERE charid = ?", name),
+                                      });
+        }
+    }
 }
 
 void SetUnityLeader(CCharEntity* PChar, uint8 leaderID)
@@ -7520,6 +7531,12 @@ void removeCharFromZone(CCharEntity* PChar)
         PChar->ClearTrusts();
     }
 
+    // The char wont tick again so ReloadParty needs to end the trust party here
+    if (PChar->PParty && PChar->PParty->IsFormedByTrusts())
+    {
+        PChar->PParty->DisbandParty();
+    }
+
     if (PChar->status == xi::Status::Shutdown)
     {
         if (PChar->PParty != nullptr)
@@ -7617,18 +7634,17 @@ bool isOrchestrionPlaced(CCharEntity* PChar)
 {
     for (auto safeContainerId : { LOC_MOGSAFE, LOC_MOGSAFE2 })
     {
-        CItemContainer* PContainer = PChar->getStorage(safeContainerId);
-        for (int slotIndex = 1; slotIndex <= PContainer->GetSize(); ++slotIndex)
-        {
-            CItem* PContainerItem = PContainer->GetItem(slotIndex);
-            if (PContainerItem != nullptr && PContainerItem->isType(ITEM_FURNISHING))
+        auto* PContainer = PChar->getStorage(safeContainerId);
+
+        const auto* POrchestrion = PContainer->FindItem(
+            [](CItem* PItem)
             {
-                CItemFurnishing* PFurniture = static_cast<CItemFurnishing*>(PContainerItem);
-                if (PFurniture->isInstalled() && PFurniture->getID() == 426)
-                {
-                    return true;
-                }
-            }
+                return PItem->isType(ITEM_FURNISHING) && PItem->getID() == 426 && static_cast<CItemFurnishing*>(PItem)->isInstalled();
+            });
+
+        if (POrchestrion)
+        {
+            return true;
         }
     }
 
@@ -7639,13 +7655,16 @@ void updateMannequins(CCharEntity* PChar)
 {
     for (auto safeContainerId : { LOC_MOGSAFE, LOC_MOGSAFE2 })
     {
-        CItemContainer* PContainer = PChar->getStorage(safeContainerId);
-        for (int slotIndex = 1; slotIndex <= PContainer->GetSize(); ++slotIndex)
-        {
-            CItem* PContainerItem = PContainer->GetItem(slotIndex);
-            if (PContainerItem != nullptr && PContainerItem->isType(ITEM_FURNISHING))
+        auto* PContainer = PChar->getStorage(safeContainerId);
+        PContainer->ForEachItem(
+            [&](CItem* PItem)
             {
-                auto* PFurnishing = static_cast<CItemFurnishing*>(PContainerItem);
+                if (!PItem->isType(ITEM_FURNISHING))
+                {
+                    return;
+                }
+
+                auto* PFurnishing = static_cast<CItemFurnishing*>(PItem);
                 if (PFurnishing->isInstalled() && PFurnishing->isMannequin())
                 {
                     auto& mannequin = PFurnishing->exdata<Exdata::Mannequin>();
@@ -7655,10 +7674,9 @@ void updateMannequins(CCharEntity* PChar)
                         ShowWarning("Invalid Mannequin placed (race of 0 in exdata, when races start at 1). It will be unusable.");
                     }
 
-                    PChar->pushPacket<GP_SERV_COMMAND_ITEM_SUBCONTAINER>(PChar, safeContainerId, slotIndex, mannequin);
+                    PChar->pushPacket<GP_SERV_COMMAND_ITEM_SUBCONTAINER>(PChar, safeContainerId, PItem->getSlotID(), mannequin);
                 }
-            }
-        }
+            });
     }
 }
 
