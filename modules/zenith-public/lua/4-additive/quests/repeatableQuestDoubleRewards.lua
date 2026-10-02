@@ -3,9 +3,9 @@
 -- Doubles gil rewards for whitelisted repeatable quests
 -- Limited to first 3 completions per day PER QUEST
 --
--- REQUIRES: C++ patch addGil-module-hook.patch to be applied
+-- REQUIRES: C++ patch 108-addGil-module-hook.patch to be applied
 -- The patch enables the xi.player.onPlayerAddGil() hook function
--- located in modules/zenith-public/git-patches/addGil-module-hook.patch
+-- located in modules/zenith-public/git-patches/108-addGil-module-hook.patch
 -----------------------------------
 
 local m = Module:new('a-q_repQstDblRwds')
@@ -253,7 +253,7 @@ local function applyBonusAndMessage(player, areaId, questId, originalAmount)
 end
 
 -----------------------------------
--- Hook for player:addGil (C++ hook from addGil-module-hook.patch)
+-- Hook for player:addGil (C++ hook from 108-addGil-module-hook.patch)
 -- The C++ patch calls this as a notification before adding gil.
 -- We add bonus gil here; the original amount is always added by C++.
 -----------------------------------

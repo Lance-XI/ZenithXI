@@ -5,6 +5,11 @@
 --
 -- Base behavior only gives the ring if the race's "home nation"
 -- matches the chosen nation. This module removes that restriction.
+--
+-- The engine re-runs charCreate at login for any character without the
+-- NEW_ADVENTURER title, not only brand-new ones (luautils.cpp OnGameIn), so the
+-- ring is a one-time grant: it is skipped when the character already owns any
+-- nation ring.
 -----------------------------------
 local m = Module:new('b_nation_rings_all_races')
 
@@ -24,9 +29,20 @@ m:addOverride('xi.player.charCreate', function(player)
     local nation = player:getNation()
     local ringId = nationRings[nation]
 
-    if ringId and not player:hasItem(ringId) then
-        player:addItem(ringId)
+    if not ringId then
+        return
     end
+
+    -- Checking only the current nation's ring would hand a second ring to a
+    -- character who has since changed nations. This also covers the case where
+    -- super() already granted the home-nation ring.
+    for _, ownedRingId in pairs(nationRings) do
+        if player:hasItem(ownedRingId) then
+            return
+        end
+    end
+
+    player:addItem(ringId)
 end)
 
 return m

@@ -23,7 +23,7 @@
  *
  * The amount of fish caught is tracked in the player's char_vars, and
  * resets at JST midnight. We inspect the Fishing Minigame 2 Packet
- * (0x110) and check if minigame sends the ANIMATION_FISHING_CAUGHT
+ * (0x110) and check if minigame sends the NewFishingCaught
  * animation. If the character had hooked a small/big fish or an item
  * as well, we increase the char_var by 1.
  *
@@ -115,8 +115,9 @@ class FishingFatigueModule : public CPPModule
             typedPacket->process(session, PChar);
 
             // Increment caught fish if something was hooked
+            // The engine only ever sets NewFishingCaught (not the legacy FishingCaught) when a catch resolves
             const auto animationID = PChar->animation;
-            if (animationID == xi::Animation::FishingCaught)
+            if (animationID == xi::Animation::NewFishingCaught && PChar->hookedFish != nullptr)
             {
                 uint8 catchType = PChar->hookedFish->catchtype;
                 if (catchType >= FISHINGCATCHTYPE_SMALLFISH && catchType <= FISHINGCATCHTYPE_ITEM)

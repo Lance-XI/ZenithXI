@@ -1,12 +1,12 @@
 diff --git a/src/map/ai/controllers/player_controller.cpp b/src/map/ai/controllers/player_controller.cpp
-index 911f70c73d..a2043c06b6 100644
+index e10d7a8397..73b72db16e 100644
 --- a/src/map/ai/controllers/player_controller.cpp
 +++ b/src/map/ai/controllers/player_controller.cpp
 @@ -96,18 +96,11 @@ auto CPlayerController::Engage(const EntityId& target) -> bool
      {
          if (distance(PChar->loc.p, PTarget->loc.p) < 30)
          {
--            if (m_lastAttackTime + std::chrono::milliseconds(PChar->GetWeaponDelay(false)) < timer::now())
+-            if (timer::now() >= m_engageLockedUntil)
 +            if (CController::Engage(target))
              {
 -                if (CController::Engage(target))
