@@ -892,7 +892,7 @@ local npcOverrides =
                 { xi.item.WATERMELON,                  208 },
                 { xi.item.POTION,                      946 },
                 { xi.item.ANTIDOTE,                    328 },
-                { xi.item.FLASK_OF_BLINDNESS_POTION,  1248 },
+                { xi.item.FLASK_OF_BLINDING_POTION,   1248 },
                 { xi.item.MYTHRIL_EARRING,            4680 },
                 { xi.item.WATER_JUG,                   208 },
             },
@@ -1208,7 +1208,18 @@ for zoneId, npcs in pairs(npcOverrides) do
         local npcMsg     = zones[zoneId].text[shopDialog]
         local npcLuaPath = fmt('xi.zones.{}.npcs.{}', zoneName, npcName)
 
-        xi.module.ensureTable(npcLuaPath)
+        -- NPC scripts load after modules, and LoadLuaObjectFromFile installs them with
+        -- sol::update_if_empty, so a table created here first would silently discard the
+        -- real script and every hook this module does not replace (Olwyn/Ness Rugetomal
+        -- onTrade, Melloa/Tomasa onSpawn). Only an NPC with no base script gets a
+        -- pre-created table; otherwise the override defers until the script loads.
+        local npcScript = io.open(fmt('./scripts/zones/{}/npcs/{}.lua', zoneName, npcName), 'r')
+        if npcScript then
+            npcScript:close()
+        else
+            xi.module.ensureTable(npcLuaPath)
+        end
+
         if npcData.removeDefault then
             zxi.npcHelpers.removeDefaultHandler(zoneId, npcName)
         end
@@ -1494,7 +1505,7 @@ m:addOverride('xi.zones.Southern_San_dOria.npcs.Ostalie.onTrigger', function(pla
         table.insert(stock, { xi.item.LIVING_KEY, 5520, 3 })
     end
 
-    player:showText(npc, zones[player:getZoneID()].text.Ostalie)
+    player:showText(npc, zones[player:getZoneID()].text.OSTALIE_SHOP_DIALOG)
     xi.shop.nation(player, stock, xi.nation.SANDORIA)
 end)
 

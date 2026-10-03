@@ -926,6 +926,7 @@ local unlockData =
 local unlockStorageVersion = 2
 local unlockVersionVar     = 'WardrobeUnlockVer'
 local maxContainerSize     = 80 -- CItemContainer::AddBuff clamps to this
+local stockContainerSize   = 80 -- Size of an untouched Mog Case/wardrobe (sql/char_storage.sql default)
 
 -----------------------------------
 -- Get char_var name for tracking unlocks
@@ -1098,15 +1099,36 @@ end
 
 -----------------------------------
 -- Character Creation: Initialize wardrobes to 0
+--
+-- The engine calls charCreate at login for any character without the
+-- NEW_ADVENTURER title (luautils.cpp OnGameIn), not only brand-new ones; base
+-- charCreate grants that title, which is what normally ends the repetition. A
+-- character made outside the normal flow (SQL, tooling) or that lost the title
+-- re-enters here, and zeroing bags that carry earned capacity would strand it,
+-- because checkAllUnlocks never re-awards an unlock whose bit is already set.
+-- So only an untouched character is reset: no storage version stamp (written by
+-- the first migrateUnlockStorage), and a bag still at stock size holding no
+-- items. The per-bag test also makes the reset idempotent (a zeroed bag no
+-- longer matches), leaves an unmigrated v1 character's partial bags for
+-- migrateUnlockStorage to top up, and never shrinks a bag that holds items
+-- (AddBuff would zero the buff while SetSize refuses, desyncing the two).
 -----------------------------------
 m:addOverride('xi.player.charCreate', function(player)
     super(player)
 
-    -- Set all managed bags to 0 slots. Subtract the live size rather than a flat
+    if player:getCharVar(unlockVersionVar) > 0 then
+        return
+    end
+
+    -- Set stock managed bags to 0 slots. Subtract the live size rather than a flat
     -- -80: CItemContainer::AddBuff accumulates into a uint16, so overshooting the
     -- current size wraps it and clamps the bag straight back up to 80.
     for bag, _ in pairs(unlockData) do
-        player:changeContainerSize(bag, -player:getContainerSize(bag))
+        local size = player:getContainerSize(bag)
+
+        if size == stockContainerSize and player:getFreeSlotsCount(bag) == size then
+            player:changeContainerSize(bag, -size)
+        end
     end
 end)
 

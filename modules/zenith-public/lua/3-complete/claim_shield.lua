@@ -1411,8 +1411,9 @@ for zoneId, mobNames in pairs(nmsToShield) do
         for _, mobName in ipairs(mobNames) do
             local mobPath = string.format('xi.zones.%s.mobs.%s', zoneName, mobName)
 
-            -- Ensure the table path exists
-            xi.module.ensureTable(mobPath)
+            -- Never ensureTable a mob path: modules load before zone mobs, and an empty table
+            -- there makes the engine discard the real scripts/zones/<Zone>/mobs/<Mob>.lua.
+            -- The override defers and is applied once that script loads.
 
             -- Add override using m:addOverride() for proper chaining
             m:addOverride(mobPath .. '.onMobInitialize', function(mob)

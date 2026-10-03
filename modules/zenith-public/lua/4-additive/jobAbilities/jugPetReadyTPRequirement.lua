@@ -20,14 +20,16 @@ local petAbilityDir = './scripts/actions/abilities/pets/'
 -- luautils::OnAbilityCheck resolves scripts/actions/abilities/pets/<abilityName>.lua per ability,
 -- so there is no single chokepoint to hook -- every Ready move is overridden individually.
 --
--- A move with no base script has no onAbilityCheck (and no onPetAbility) to hook: it is inert
--- today, and registering an override against it would only log "Override not applied" at startup.
--- Overriding it anyway via xi.module.ensureTable would be worse -- ability scripts load after
--- modules, and LoadLuaObjectFromFile installs with sol::update_if_empty, so a table we created
--- first would silently discard the real script if one ever appeared.
+-- A move with no base script (not implemented upstream yet) has no onAbilityCheck to hook. It still
+-- passes CanUseAbility and the pet still performs it, with no effect but a Ready charge spent, so
+-- it needs the gate too. Its (empty) table is created below so the override has something to
+-- attach to.
 --
--- Instead every move is listed and gated on the script existing, so a move enrolls by itself on
--- the next server start once the script is implemented upstream. Nothing to maintain here.
+-- That is done ONLY when the script file is absent at startup. Ability scripts load after
+-- modules, and LoadLuaObjectFromFile installs with sol::update_if_empty, so a table created for a
+-- move whose script exists would silently discard the real script. The file is checked on every
+-- start, so a move switches to the normal deferred override by itself once upstream implements
+-- it. Nothing to maintain here.
 local function petAbilityScriptExists(abilityName)
     local file = io.open(petAbilityDir .. abilityName .. '.lua', 'r')
 
@@ -65,19 +67,23 @@ local readyMoves =
 }
 
 for _, moveName in ipairs(readyMoves) do
-    if petAbilityScriptExists(moveName) then
-        m:addOverride(fmt('xi.actions.abilities.pets.{}.onAbilityCheck', moveName), function(player, target, ability)
-            if player:hasJugPet() then
-                local pet = player:getPet()
+    local abilityPath = fmt('xi.actions.abilities.pets.{}', moveName)
 
-                if pet and pet:getTP() < 1000 then
-                    return xi.msg.basic.PET_NOT_ENOUGH_TP
-                end
-            end
-
-            return super(player, target, ability)
-        end)
+    if not petAbilityScriptExists(moveName) then
+        xi.module.ensureTable(abilityPath)
     end
+
+    m:addOverride(fmt('{}.onAbilityCheck', abilityPath), function(player, target, ability)
+        if player:hasJugPet() then
+            local pet = player:getPet()
+
+            if pet and pet:getTP() < 1000 then
+                return xi.msg.basic.PET_NOT_ENOUGH_TP
+            end
+        end
+
+        return super(player, target, ability)
+    end)
 end
 
 return m

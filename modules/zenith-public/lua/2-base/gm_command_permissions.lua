@@ -23,7 +23,7 @@
 --   3. Restart the server
 -----------------------------------
 
-local m = Module:new('c_gmCmdPerms')
+local m = Module:new('b_gmCmdPerms')
 m:addOverride('xi.dummyFunc', function()
 end)
 
@@ -220,7 +220,6 @@ local commandPermissions =
     addallmounts            = 1,  -- Unlock all mount types
     addalltrusts            = 1,  -- Unlock all trust NPCs
     chocobo                 = 1,  -- Spawn/manage chocobo mount
-    chocoboraising          = 1,  -- Access chocobo raising interface
     mount                   = 1,  -- Mount specified creature type
 
     ------------------------------------
@@ -329,7 +328,6 @@ local commandPermissions =
     gc_full                 = 5,  -- Force full garbage collection
     gc_step                 = 5,  -- Force incremental garbage collection step
     givebonanzapearl        = 5,  -- Give Mog Bonanza pearl items
-    packetmod               = 5,  -- Modify outgoing packets (DANGEROUS)
     reloadbattlefield       = 5,  -- Reload all battlefield data
     reloaddefaultactions    = 5,  -- Reload default action scripts
     reloadinteraction       = 5,  -- Reload NPC interaction scripts

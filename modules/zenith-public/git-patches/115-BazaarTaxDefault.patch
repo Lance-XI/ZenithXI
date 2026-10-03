@@ -10,12 +10,16 @@ zone.yaml sets `tax`, so every zone would fall back to 0%.
 Change the dataset default instead. A zone.yaml that sets its own `tax` still
 wins. CZone::LoadZoneSettings scales it by 100 exactly as the SQL path did, so
 10.0 gives the same +10% bazaar price as the old 10.00 column value.
+
+The zone settings tests asserted the old 0% default (the minimal-document
+defaults test and West Ronfaure, whose zone.yaml sets no tax), so the same patch
+updates both assertions to 10.0f.
 ---
 diff --git a/src/map/data/datasets/zones/settings/dataset.cpp b/src/map/data/datasets/zones/settings/dataset.cpp
-index bd96437056..3d4e58af1f 100644
+index e23231e4ea..93f27dd8ff 100644
 --- a/src/map/data/datasets/zones/settings/dataset.cpp
 +++ b/src/map/data/datasets/zones/settings/dataset.cpp
-@@ -256,7 +256,8 @@ auto Dataset::decode(const std::string_view text) -> Records
+@@ -279,7 +279,8 @@ auto Dataset::decode(const std::string_view text) -> Records
          .Type             = yaml::resolveFlags(document.type),
          .Misc             = yaml::resolveFlags(document.misc),
          .Music            = convertMusic(document.music),
@@ -25,3 +29,25 @@ index bd96437056..3d4e58af1f 100644
          .LevelRestriction = document.level_restriction.value_or(0),
          .ZoneLines        = convertZoneLines(document.zonelines),
          .Transports       = convertTransports(document.transport),
+diff --git a/src/test/tests/data/zones/settings_tests.cpp b/src/test/tests/data/zones/settings_tests.cpp
+index 1f7227226e..410123b691 100644
+--- a/src/test/tests/data/zones/settings_tests.cpp
++++ b/src/test/tests/data/zones/settings_tests.cpp
+@@ -56,7 +56,7 @@ TEST_CASE("zone settings: omitted fields fall back to their defaults", "[data][z
+     REQUIRE(records.Misc == xi::ZoneMisc::None);
+     REQUIRE(records.Music.Day == 0);
+     REQUIRE(records.Music.BattleParty == 0);
+-    REQUIRE(records.Tax == 0.0f);
++    REQUIRE(records.Tax == 10.0f); // ZenithXI default bazaar tax (115-BazaarTaxDefault)
+     REQUIRE(records.LevelRestriction == 0);
+     REQUIRE(records.NavMesh.SkipPlanes.empty());
+     REQUIRE_FALSE(records.NavMesh.OffMeshLinks.has_value());
+@@ -104,7 +104,7 @@ TEST_CASE("zone settings: West Ronfaure keeps every setting it declares", "[data
+     REQUIRE(settings->Music.Night == 109);
+     REQUIRE(settings->Music.BattleSolo == 101);
+     REQUIRE(settings->Music.BattleParty == 103);
+-    REQUIRE(settings->Tax == 0.0f);
++    REQUIRE(settings->Tax == 10.0f); // zone.yaml sets no tax, so the ZenithXI default applies
+     REQUIRE(settings->LevelRestriction == 0);
+ 
+     REQUIRE(settings->Misc == (xi::ZoneMisc::Fellow | xi::ZoneMisc::Mount | xi::ZoneMisc::Mazurka |
