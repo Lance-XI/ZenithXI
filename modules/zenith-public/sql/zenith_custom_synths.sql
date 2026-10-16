@@ -12,6 +12,25 @@ WHERE ID IN
 50516  -- Istiridye
 );
 
+-- Changes the four Automaton Oil synths (NQ, +1, +2, +3) to be seperate synths entirely, whose
+-- HQ3 results change only quantity (3/3/3/6) [custom: compromise era/modern]
+
+UPDATE synth_recipes
+SET ResultHQ1 = 18731, ResultHQ2 = 18731, ResultHQ3 = 18731, ResultQty = 3, ResultHQ1Qty = 3, ResultHQ2Qty = 3
+WHERE ID = 61025;
+
+UPDATE synth_recipes
+SET ResultHQ2 = 18732, ResultHQ3 = 18732, ResultQty = 3, ResultHQ1Qty = 3, ResultHQ2Qty = 3, ResultHQ3Qty = 6
+WHERE ID = 61530;
+
+UPDATE synth_recipes
+SET ResultHQ3 = 18733, ResultQty = 3, ResultHQ1Qty = 3, ResultHQ2Qty = 3, ResultHQ3Qty = 6
+WHERE ID = 62046;
+
+UPDATE synth_recipes
+SET ResultQty = 3, ResultHQ1Qty = 3, ResultHQ2Qty = 3, ResultHQ3Qty = 6
+WHERE ID = 62548;
+
 -- This section enables the Synthesis recipes for items dropped by Notorious
 -- Monsters from the Wings of the Goddess expansion. These NMs will be enabled
 -- on Zenith at launch, so setting the content_tag to NULL (Vanilla).
