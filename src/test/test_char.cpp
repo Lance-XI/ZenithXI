@@ -26,6 +26,7 @@
 #include "map/entities/base_entity.h"
 #include "map/entities/char_entity.h"
 #include "test_common.h"
+#include "zone.h"
 
 #include <array>
 #include <format>
@@ -196,9 +197,13 @@ TestChar::~TestChar()
 
 void TestChar::clearPackets() const
 {
+    // drain without clearPacketList, which also resets the spawn lists
     if (session_)
     {
-        session_->PChar->clearPacketList();
+        while (!session_->PChar->isPacketListEmpty())
+        {
+            std::ignore = session_->PChar->popPacket();
+        }
     }
 }
 

@@ -27,8 +27,10 @@
 #include <array>
 
 #include "entities/char_entity.h"
+#include "packets/c2s/validation.h"
 #include "packets/char_sync.h"
 #include "packets/char_update.h"
+#include "zone.h"
 
 namespace
 {
@@ -93,10 +95,14 @@ void GP_CLI_COMMAND_CHARREQ2::process(MapSession* PSession, CCharEntity* PChar) 
             ShowWarningFmt("GP_CLI_COMMAND_CHARREQ2 from {}: target {} ({}) is {:.1f}y away (beyond {}y)", PChar->getName(), PTarget->getName(), PTarget->id, dist, CHARREQ2_SYNC_RANGE);
         }
 
-        if (PTarget->objtype == TYPE_PC)
+        if (auto* PTargetChar = dynamic_cast<CCharEntity*>(PTarget))
         {
-            auto* PTargetChar = static_cast<CCharEntity*>(PTarget);
             if (PTargetChar->m_isGMHidden)
+            {
+                continue;
+            }
+
+            if (PTargetChar->m_moghouseID != PChar->m_moghouseID)
             {
                 continue;
             }

@@ -19,7 +19,7 @@ spellObject.onMagicCastingCheck = function(caster, target, spell)
     return 0
 end
 
-spellObject.onSpellCast = function(caster, target, spell)
+spellObject.onSpellCast = function(caster, target, spell, action)
     local params          = xi.spells.blue.getDefaultParams(caster)
     params.ecosystem      = xi.ecosystem.BEASTMEN
     params.tpModifier     = xi.spells.blue.tpMod.DAMAGE
@@ -39,16 +39,17 @@ spellObject.onSpellCast = function(caster, target, spell)
     params.int_wsc = 0.2
 
     -- Handle damage.
-    local damage = xi.spells.blue.usePhysicalSpell(caster, target, spell, params)
+    local damage = xi.spells.blue.usePhysicalSpell(caster, target, spell, params, action)
 
     if params.hitsLanded <= 0 then
         return damage
     end
 
     -- Handle status effects.
+    -- Duration seems to be 2 - 8 seconds with float precision
     local effectTable =
     {
-        [1] = { xi.effect.STUN, 1, 0, 5 },
+        [1] = { xi.effect.STUN, 1, 0, math.randomFloat(2, 8) },
     }
 
     xi.spells.blue.applyBlueAdditionalEffect(caster, target, params, effectTable)

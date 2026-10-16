@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -22,7 +22,11 @@
 #pragma once
 
 #include "common/cbasetypes.h"
+#include "common/logging.h"
+#include "common/types/maybe.h"
 
+#include <array>
+#include <string>
 #include <vector>
 
 // md5 hash + blowfish key appended by SearchHandler::encrypt()
@@ -46,9 +50,11 @@ struct SearchRequest
     std::string   name;
     uint8         nameLen;
     uint8         commentType;
-    bool          friendsOnly = false;
+    bool          friendsOnly     = false;
+    bool          requestListOnly = false;
 
-    std::vector<uint32> characterIds;
+    std::vector<uint32>      characterIds;
+    std::vector<std::string> characterNames;
 };
 
 class SearchPacket

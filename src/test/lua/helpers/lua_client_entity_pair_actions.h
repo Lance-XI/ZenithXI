@@ -41,6 +41,7 @@ public:
     void setBlueSpells(const sol::table& spellIds) const;
     void useWeaponskill(CLuaBaseEntity* target, uint16 wsId) const;
     void useAbility(CLuaBaseEntity* target, ABILITY abilityId) const;
+    void useMonsterSkill(CLuaBaseEntity* target, uint16 datSkillId) const;
     void changeTarget(CLuaBaseEntity* target) const;
     void rangedAttack(CLuaBaseEntity* target) const;
     void useItem(CLuaBaseEntity* target, uint8 slotId, sol::optional<uint8> storageId) const;
@@ -49,6 +50,11 @@ public:
     void formAlliance(CLuaBaseEntity* player) const;
     void acceptPartyInvite() const;
     void leaveParty() const;
+    void requestParty(CLuaBaseEntity* player) const;
+    void cancelPartyRequest(CLuaBaseEntity* player) const;
+    void setAcceptingRequests(bool enabled) const;
+    void setSeekingParty(bool enabled) const;
+    void blacklistAdd(CLuaBaseEntity* player) const;
     void setLevelSync(CLuaBaseEntity* player) const;
     void tradeNpc(const sol::object& npcQuery, const sol::table& items, sol::optional<sol::table> expectedEvent) const;
     void tradeRequest(CLuaBaseEntity* target) const;
@@ -60,6 +66,7 @@ public:
     void bazaarPrice(uint8 invSlot, uint32 price) const;
     void bazaarOpen(CLuaBaseEntity* seller) const;
     void setSearchMessage(const std::string& message, sol::optional<uint32> msgType) const;
+    void linkshellActive(uint8 invSlot, uint8 lsNum, bool active, sol::optional<std::string> name) const;
     void bazaarBuy(uint8 sellerInvSlot, uint32 quantity) const;
     void acceptRaise() const;
     void engage(CLuaBaseEntity* mob) const;

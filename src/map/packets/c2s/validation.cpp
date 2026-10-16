@@ -48,6 +48,7 @@ auto PacketValidator::blockedBy(const magic_enum::containers::bitset<BlockedStat
     CHECK_BLOCKED(BlockedState::Engaged,        PChar_->PAI->IsEngaged())
     CHECK_BLOCKED(BlockedState::AbnormalStatus, PChar_->status != xi::Status::Normal)
     CHECK_BLOCKED(BlockedState::Monstrosity,    PChar_->m_PMonstrosity != nullptr)
+    CHECK_BLOCKED(BlockedState::Gestation,      PChar_->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Gestation))
     CHECK_BLOCKED(BlockedState::Healing,        PChar_->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Healing) || PChar_->animation == xi::Animation::Healing)
     CHECK_BLOCKED(BlockedState::Charmed,        PChar_->StatusEffectContainer->HasStatusEffect({ xi::StatusEffect::CharmI, xi::StatusEffect::CharmIi }))
     CHECK_BLOCKED(BlockedState::PreventAction,  PChar_->StatusEffectContainer->HasPreventActionEffect())
@@ -93,17 +94,17 @@ auto PacketValidator::hasLinkshellRank(const uint8_t slot, const LSTYPE rank) ->
     switch (slot)
     {
         case 1:
-            PItemLinkshell = reinterpret_cast<CItemLinkshell*>(PChar_->getEquip(SLOT_LINK1));
+            PItemLinkshell = PChar_->getLinkshell(SLOT_LINK1);
             break;
         case 2:
-            PItemLinkshell = reinterpret_cast<CItemLinkshell*>(PChar_->getEquip(SLOT_LINK2));
+            PItemLinkshell = PChar_->getLinkshell(SLOT_LINK2);
             break;
         default:
             result_.addError("Invalid linkshell slot.");
             return *this;
     }
 
-    if (!PItemLinkshell || !PItemLinkshell->isType(ITEM_LINKSHELL))
+    if (!PItemLinkshell)
     {
         result_.addError("Invalid linkshell item.");
         return *this;
@@ -230,14 +231,14 @@ auto PacketValidator::isEngaged() -> PacketValidator&
     return *this;
 }
 
-auto PacketValidator::isInMogHouse() -> PacketValidator&
+auto PacketValidator::isInMogHouse(const xi::MogHouse kind) -> PacketValidator&
 {
     if (!result_.valid())
     {
         return *this;
     }
 
-    if (!PChar_->inMogHouse())
+    if (!PChar_->inMogHouse(kind))
     {
         result_.addError("Character is not in Mog House.");
     }

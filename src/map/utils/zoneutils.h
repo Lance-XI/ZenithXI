@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -23,7 +23,6 @@
 
 #include <common/cbasetypes.h>
 #include <common/ipp.h>
-#include <common/types/flag.h>
 
 #include <queue>
 

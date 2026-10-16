@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2025 LandSandBoat Dev Teams
@@ -22,12 +22,15 @@
 #include "0x036_item_transfer.h"
 
 #include "entities/char_entity.h"
+#include "entities/npc_entity.h"
 #include "enums/msg_std.h"
 #include "items/transactions/npc_trade.h"
 #include "lua/luautils.h"
+#include "packets/c2s/validation.h"
 #include "packets/s2c/0x053_systemmes.h"
 #include "status_effect_container.h"
 #include "trade_container.h"
+#include "utils/charutils.h"
 
 #include <algorithm>
 #include <array>
@@ -42,8 +45,10 @@ constexpr uint8 MAX_TRADE_SLOTS = 9;
 
 auto GP_CLI_COMMAND_ITEM_TRANSFER::validate(MapSession* PSession, const CCharEntity* PChar) const -> PacketValidationResult
 {
+    // A Monipulator can only trade with the Feretory's NPCs.
     return PacketValidator(PChar)
-        .blockedBy({ BlockedState::InEvent, BlockedState::Monstrosity })
+        .blockedBy({ BlockedState::InEvent })
+        .mustEqual(PChar->m_PMonstrosity == nullptr || PChar->getZone() == xi::ZoneId::Feretory, true, "Monipulators only trade in the Feretory")
         .range("ItemNum", this->ItemNum, 1, MAX_TRADE_SLOTS);
 }
 
@@ -62,6 +67,16 @@ void GP_CLI_COMMAND_ITEM_TRANSFER::process(MapSession* PSession, CCharEntity* PC
     if (!PNpc ||
         PNpc->id != this->UniqueNo ||
         distance(PChar->loc.p, PNpc->loc.p) > 6.0f)
+    {
+        return;
+    }
+
+    if (PChar->inMogHouse(xi::MogHouse::Visiting))
+    {
+        return;
+    }
+
+    if (const auto* PNpcEntity = dynamic_cast<CNpcEntity*>(PNpc); PNpcEntity && PNpcEntity->contentDisabled())
     {
         return;
     }
@@ -97,7 +112,8 @@ void GP_CLI_COMMAND_ITEM_TRANSFER::process(MapSession* PSession, CCharEntity* PC
 
         if (!PItem)
         {
-            ShowErrorFmt("GP_CLI_COMMAND_ITEM_TRANSFER: {} trying to trade NPC {} with an empty inventory slot {}!", PChar->getName(), PNpc->getName(), invSlotId);
+            // This is a warning because inventory desync/stale state and/or addons using a stale state can use empty slots and is rather spammy on a live server.
+            ShowWarningFmt("GP_CLI_COMMAND_ITEM_TRANSFER: {} trying to trade NPC {} with an empty inventory slot {}!", PChar->getName(), PNpc->getName(), invSlotId);
             return;
         }
 
@@ -107,7 +123,7 @@ void GP_CLI_COMMAND_ITEM_TRANSFER::process(MapSession* PSession, CCharEntity* PC
             return;
         }
 
-        if (std::find(tradeItems.begin(), tradeItems.begin() + slotId, PItem) != tradeItems.begin() + slotId)
+        if (std::ranges::contains(tradeItems.begin(), tradeItems.begin() + slotId, PItem))
         {
             ShowErrorFmt("GP_CLI_COMMAND_ITEM_TRANSFER: {} trying to trade NPC {} with duplicate inventory slot {}!", PChar->getName(), PNpc->getName(), invSlotId);
             return;

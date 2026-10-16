@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -19,19 +19,18 @@
 ===========================================================================
 */
 
-#ifndef _BATTLEENTITY_H
-#define _BATTLEENTITY_H
+#pragma once
 
 #include "common/types/hash_map.h"
 #include "common/types/maybe.h"
 
+#include <memory>
 #include <set>
 #include <type_traits>
 #include <vector>
 
 #include "alliance.h"
 #include "base_entity.h"
-#include "enums/msg_basic.h"
 #include "modifier.h"
 
 #include "data/enums/attack_type.h"
@@ -166,6 +165,7 @@ class CRangeState;
 class CRecastContainer;
 class CNotorietyContainer;
 struct action_t;
+enum class MsgBasic : uint16_t;
 
 class CBattleEntity : public CBaseEntity
 {
@@ -242,7 +242,7 @@ public:
     // Deals damage and updates the last attacker which is used when sending a player death message
     virtual auto takeDamage(int32 amount, CBattleEntity* attacker = nullptr, xi::AttackType attackType = xi::AttackType::None, xi::DamageType damageType = xi::DamageType::None, bool isSkillchainDamage = false) -> int32;
 
-    int16 getMod(xi::Mod modID);
+    int16 getMod(xi::Mod modID) const;
     int16 getMaxGearMod(xi::Mod modID);
 
     bool CanRest();        // checks if able to heal
@@ -425,5 +425,3 @@ private:
     static_assert(std::is_same_v<decltype(m_modStatSave), HashMap<xi::Mod, int16, EnumClassHash>>);
     static_assert(std::is_same_v<decltype(m_petMod), HashMap<PetModType, HashMap<xi::Mod, int16, EnumClassHash>, EnumClassHash>>);
 };
-
-#endif

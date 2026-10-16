@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -19,13 +19,15 @@
 ===========================================================================
 */
 
-#ifndef _LUAZONE_H
-#define _LUAZONE_H
+#pragma once
 
 #include "common/cbasetypes.h"
 #include "enums/terrain_type.h"
-#include "luautils.h"
 #include "zone.h"
+
+#include <sol/forward.hpp>
+
+#include <string>
 
 class CZone;
 
@@ -89,5 +91,3 @@ public:
 
     static void Register();
 };
-
-#endif

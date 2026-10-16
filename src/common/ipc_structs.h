@@ -40,6 +40,7 @@ namespace ipc
 
 struct EmptyStruct
 {
+    uint8 unused{}; // glaze rejects an aggregate with no members
 };
 
 struct AccountLogin
@@ -135,8 +136,7 @@ struct ChatMessageAssist
     CHAT_MESSAGE_TYPE messageType{ MESSAGE_NA_ASSIST };
 };
 
-// NOTE: Remember some external tools like announce.py rely on this struct layout.
-// If you change it, please update the tools too.
+// NOTE: tools/announce.py builds this message by field name. Rename a field and update it too.
 struct ChatMessageServerMessage
 {
     uint32            senderId{};
@@ -173,6 +173,17 @@ struct PartyInviteResponse
     uint32 inviterId{};
     uint16 inviterTargId{};
     uint8  inviteAnswer{};
+};
+
+struct PartyRequest
+{
+    uint32      recipientId{};
+    uint32      requesterId{};
+    uint16      requesterTargId{};
+    xi::ZoneId  requesterZoneId{};
+    std::string requesterName{};
+    uint16      requesterRace{};
+    uint8       kind{};
 };
 
 struct PartyReload

@@ -36,11 +36,15 @@
 #include "data/enums/weather.h"
 #include "enmity_container.h"
 #include "entities/char_entity.h"
+#include "entities/pet_entity.h"
 #include "enums/loot_recast.h"
+#include "enums/msg_basic.h"
 #include "items.h"
+#include "lua/lua_base_entity.h"
 #include "lua/luautils.h"
 #include "mob_spell_container.h"
 #include "mobskill.h"
+#include "monstrosity.h"
 #include "packets/pet_sync.h"
 #include "packets/s2c/0x029_battle_message.h"
 #include "recast_container.h"
@@ -288,10 +292,7 @@ uint32 CMobEntity::GetRandomGil()
 
     float gil = (float)pow(GetMLevel(), 1.05f);
 
-    if (gil < 1)
-    {
-        gil = 1;
-    }
+    gil = std::max(gil, 1.0f);
 
     uint16 highGil = (uint16)(gil / 3 + 4);
 
@@ -300,10 +301,7 @@ uint32 CMobEntity::GetRandomGil()
         highGil = max;
     }
 
-    if (highGil < 2)
-    {
-        highGil = 2;
-    }
+    highGil = std::max<uint16>(highGil, 2);
 
     // randomize it
     gil += xirand::GetRandomNumber(highGil);
@@ -666,9 +664,9 @@ void CMobEntity::PostTick()
             loc.zone->UpdateEntityPacket(this, ENTITY_UPDATE, updatemask);
 
             // If this mob is charmed, it should sync with its master
-            if (PMaster && PMaster->PPet == this && PMaster->objtype == TYPE_PC)
+            if (auto* PChar = dynamic_cast<CCharEntity*>(PMaster); PChar && PChar->PPet == this)
             {
-                ((CCharEntity*)PMaster)->pushPacket<CPetSyncPacket>((CCharEntity*)PMaster);
+                PChar->pushPacket<CPetSyncPacket>(PChar);
             }
 
             updatemask = 0;
@@ -819,7 +817,7 @@ void CMobEntity::Spawn()
             waypoints.push_back({ point, timer::duration::zero(), false });
         }
 
-        if (PAI->PathFind->PathThrough(std::move(waypoints), PATHFLAG_PATROL))
+        if (PAI->PathFind->PathThrough(std::move(waypoints), PATHFLAG_PATROL) && PAI->CanFollowPath())
         {
             PAI->PathFind->FollowPath(timer::now());
         }
@@ -830,7 +828,8 @@ void CMobEntity::Spawn()
     // Roam immediately on spawn
     const auto minTurns = static_cast<uint8>(getMobMod(xi::MobMod::RoamTurnsMin));
     const auto maxTurns = static_cast<uint8>(getMobMod(xi::MobMod::RoamTurns));
-    if (CanRoam() && PAI->PathFind->RoamAround(GetRoamAnchor(), GetRoamDistance(), minTurns, maxTurns, m_roamFlags, roamRegion_))
+    const bool isWorm   = (m_roamFlags & xi::RoamFlag::Worm) != xi::RoamFlag::None;
+    if (!PAI->PathFind->IsFollowingPath() && CanRoam() && !isWorm && PAI->PathFind->RoamAround(GetRoamAnchor(), GetRoamDistance(), minTurns, maxTurns, m_roamFlags, roamRegion_) && PAI->CanFollowPath())
     {
         PAI->PathFind->FollowPath(timer::now());
     }
@@ -898,6 +897,17 @@ void CMobEntity::DistributeRewards()
             {
                 charutils::DistributeExperiencePoints(PChar, this);
                 charutils::DistributeCapacityPoints(PChar, this);
+            }
+
+            // JP wiki: a Monipulator never earns gil, and finds items only under Belligerency. Retail shows only crystals and seals.
+            if (PChar->m_PMonstrosity)
+            {
+                if (PChar->m_PMonstrosity->Belligerency)
+                {
+                    DropItems(PChar);
+                }
+
+                return;
             }
 
             // check for gil (beastmen drop gil, some NMs drop gil)
@@ -1111,7 +1121,7 @@ void CMobEntity::DropItems(CCharEntity* PChar)
 
     const DropList_t* drops = dropList();
 
-    if (!getMobMod(xi::MobMod::NoDrops) && drops != nullptr && (!drops->Items.empty() || !drops->Groups.empty() || PAI->EventHandler.hasListener("ITEM_DROPS")))
+    if (!getMobMod(xi::MobMod::NoDrops) && PChar->m_PMonstrosity == nullptr && drops != nullptr && (!drops->Items.empty() || !drops->Groups.empty() || PAI->EventHandler.hasListener("ITEM_DROPS")))
     {
         // THLvl determines the drop rate.
         auto thDropRateFunction = lua["xi"]["combat"]["treasureHunter"]["getDropRate"];
@@ -1194,7 +1204,7 @@ void CMobEntity::DropItems(CCharEntity* PChar)
 
         // Check for geode/avatarites drops
         // Only one type of geode can drop per mob
-        if (!isNotorious && xirand::GetRandomNumber(100) < 20 && CanAddSpecial(LootRecastID::Geode))
+        if (!isNotorious && PChar->m_PMonstrosity == nullptr && xirand::GetRandomNumber(100) < 20 && CanAddSpecial(LootRecastID::Geode))
         {
             if (const auto geodes = GetEligibleGeodes(); !geodes.empty())
             {
@@ -1252,11 +1262,14 @@ void CMobEntity::DropItems(CCharEntity* PChar)
                 return;
             }
 
+            // A Monipulator under Belligerency finds crystals without Signet. Monipulators never party.
+            const auto belligerent = PChar->m_PMonstrosity != nullptr && PChar->m_PMonstrosity->Belligerency;
+
             uint8 playersNearby = 0;
             // clang-format off
-            PChar->ForParty([this, &playersNearby, requiredEffect](CBattleEntity* PMember)
+            PChar->ForParty([this, &playersNearby, requiredEffect, belligerent](CBattleEntity* PMember)
             {
-                if (PMember->StatusEffectContainer->HasStatusEffect(requiredEffect) &&
+                if ((PMember->StatusEffectContainer->HasStatusEffect(requiredEffect) || belligerent) &&
                     PMember->getZone() == getZone() &&
                     distance(PMember->loc.p, loc.p) < 100)
                 {
@@ -1374,10 +1387,10 @@ void CMobEntity::OnEngage(CAttackState& state)
         // TODO: Supertanking might be effected by this block when we don't want it to be.
         // Things like Ambuscade "don't have" supertanking, though.
         // This block apparently only effects rare things like NW apollyon, so might be ok for now.
-        if (PTarget->objtype == TYPE_PC)
+        if (auto* PChar = dynamic_cast<CCharEntity*>(PTarget))
         {
             // clang-format off
-            ((CCharEntity*)PTarget)->ForAlliance([this, PTarget, range](CBattleEntity* PMember)
+            PChar->ForAlliance([this, PTarget, range](CBattleEntity* PMember)
             {
                 auto currentDistance = distance(PMember->loc.p, PTarget->loc.p);
                 if (currentDistance < range)
@@ -1417,6 +1430,12 @@ void CMobEntity::OnDespawn(CDespawnState& /*unused*/)
 
     FadeOut();
 
+    // An idle pet leaves with its master. A fighting pet leaves once its fight ends, even if the master is back by then.
+    if (auto* PMobPet = dynamic_cast<CMobEntity*>(PPet); PMobPet && PMobPet->PMaster == this && PMobPet->getMobMod(xi::MobMod::NoDespawn) == 0)
+    {
+        PMobPet->SetDespawnTime(1ms);
+    }
+
     luautils::OnMobDespawn(this);
     PAI->EventHandler.triggerListener("DESPAWN", this);
 }
@@ -1428,6 +1447,11 @@ void CMobEntity::Die()
     if (PBattlefield != nullptr)
     {
         PBattlefield->handleDeath(this);
+    }
+
+    if (spawnSlot)
+    {
+        spawnSlot->OnKill(this);
     }
 
     PEnmityContainer->Clear();
@@ -1462,7 +1486,7 @@ void CMobEntity::Die()
     }));
     // clang-format on
 
-    if (PMaster && PMaster->PPet == this && PMaster->objtype == TYPE_PC)
+    if (PMaster && PMaster->PPet == this && dynamic_cast<const CCharEntity*>(PMaster) != nullptr)
     {
         petutils::DetachPet(PMaster);
     }

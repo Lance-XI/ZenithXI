@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -29,6 +29,8 @@
 #include "entities/char_entity.h"
 #include "entities/mob_entity.h"
 #include "entities/pet_entity.h"
+#include "enums/msg_basic.h"
+#include "lua/luautils.h"
 #include "packets/s2c/0x028_battle2.h"
 #include "packets/s2c/0x029_battle_message.h"
 #include "petskill.h"
@@ -230,9 +232,8 @@ auto CAbilityState::Update(const timer::time_point tick) -> bool
 
     if (IsCompleted() && tick > GetEntryTime() + m_castTime + m_PAbility->getAnimationTime())
     {
-        if (m_PEntity->objtype == TYPE_PC)
+        if (auto* PChar = dynamic_cast<CCharEntity*>(m_PEntity))
         {
-            CCharEntity* PChar = static_cast<CCharEntity*>(m_PEntity);
             PChar->m_charHistory.abilitiesUsed++;
         }
         m_PEntity->PAI->EventHandler.triggerListener("ABILITY_STATE_EXIT", m_PEntity, m_PAbility.get());
@@ -249,10 +250,8 @@ auto CAbilityState::CanUseAbility() const -> bool
 
     std::unique_ptr<CBasicPacket> errMsg;
 
-    if (m_PEntity->objtype == TYPE_PC)
+    if (auto* PChar = dynamic_cast<CCharEntity*>(m_PEntity))
     {
-        auto* PChar = static_cast<CCharEntity*>(m_PEntity);
-
         const bool isLuopanAbility = PAbility->getID() >= ABILITY_CONCENTRIC_PULSE && PAbility->getID() <= ABILITY_RADIAL_ARCANA;
 
         if (PChar->PRecastContainer->HasRecast(RECAST_ABILITY, PAbility->getRecastId(), PAbility->getRecastTime()))

@@ -624,7 +624,7 @@ auto SearchHandler::_HandleSearchRequest(const uint16_t length) -> SearchRequest
         const auto EntryType = static_cast<SearchType>(unpackBitsLE(&buffer_[0x11], bitOffset, 5));
         bitOffset += 5;
 
-        if ((EntryType != SearchType::Friend) && (EntryType != SearchType::Linkshell) && (EntryType != SearchType::Linkshell2) && (EntryType != SearchType::Comment) && (EntryType != SearchType::Flags2))
+        if ((EntryType != SearchType::Friend) && (EntryType != SearchType::RequestList) && (EntryType != SearchType::Linkshell) && (EntryType != SearchType::Linkshell2) && (EntryType != SearchType::Comment) && (EntryType != SearchType::Flags2))
         {
             if ((bitOffset + 3) >= workloadBits) // so 0000000 at the end does not get interpreted as name entry
             {
@@ -784,6 +784,11 @@ auto SearchHandler::_HandleSearchRequest(const uint16_t length) -> SearchRequest
                 sr.friendsOnly = true;
                 break;
             }
+            case SearchType::RequestList: // Party request history, 0 byte
+            {
+                sr.requestListOnly = true;
+                break;
+            }
             case SearchType::Flags1: // Flag Entry #1, 2 byte,
             {
                 if (isPresent == 0x1)
@@ -835,19 +840,38 @@ auto SearchHandler::_HandleSearchRequest(const uint16_t length) -> SearchRequest
         sr.name.insert(0, name);
     }
 
+    const uint16 dataLength    = length - searchPacketTrailerSize;
+    uint16       trailerOffset = 0x11 + size;
+
     // Friend searches append a uint16 count and the uint32 charids of online friends after the query block
     if (sr.friendsOnly)
     {
         constexpr uint16 maxFriendIds = 200;
-        const uint16     countOffset  = 0x11 + size;
-        const uint16     idsOffset    = countOffset + 2;
-        const uint16     dataLength   = length - searchPacketTrailerSize;
+        const uint16     idsOffset    = trailerOffset + 2;
         if (dataLength >= idsOffset)
         {
-            const auto count = std::min<uint16>({ ref<uint16>(buffer_.data(), countOffset), maxFriendIds, static_cast<uint16>((dataLength - idsOffset) / 4) });
+            const auto count = std::min<uint16>({ ref<uint16>(buffer_.data(), trailerOffset), maxFriendIds, static_cast<uint16>((dataLength - idsOffset) / 4) });
             for (uint16 index = 0; index < count; ++index)
             {
                 sr.characterIds.push_back(ref<uint32>(buffer_.data(), idsOffset + index * 4));
+            }
+
+            trailerOffset = idsOffset + count * 4;
+        }
+    }
+
+    // Request list searches append a uint16 count and the 16-byte names from the client's party request history
+    if (sr.requestListOnly)
+    {
+        constexpr uint16 maxRequestNames = 64;
+        constexpr uint16 nameSize        = 16;
+        const uint16     namesOffset     = trailerOffset + 2;
+        if (dataLength >= namesOffset)
+        {
+            const auto count = std::min<uint16>({ ref<uint16>(buffer_.data(), trailerOffset), maxRequestNames, static_cast<uint16>((dataLength - namesOffset) / nameSize) });
+            for (uint16 index = 0; index < count; ++index)
+            {
+                sr.characterNames.push_back(asStringFromUntrustedSource(&buffer_[namesOffset + index * nameSize], nameSize - 1));
             }
         }
     }
@@ -864,7 +888,7 @@ auto SearchHandler::getNumSessionsInUse(const std::string& ipAddressStr) const -
     if (IPAddressWhitelist_.read(
             [ipAddressStr](const auto& ipWhitelist)
             {
-                return ipWhitelist.find(ipAddressStr) != ipWhitelist.end();
+                return ipWhitelist.contains(ipAddressStr);
             }))
     {
         return 0;
@@ -873,7 +897,7 @@ auto SearchHandler::getNumSessionsInUse(const std::string& ipAddressStr) const -
     return IPAddressesInUse_.read(
         [ipAddressStr](const auto& ipAddrsInUse) -> uint16_t
         {
-            if (ipAddrsInUse.find(ipAddressStr) != ipAddrsInUse.end())
+            if (ipAddrsInUse.contains(ipAddressStr))
             {
                 return ipAddrsInUse.at(ipAddressStr);
             }
@@ -889,7 +913,7 @@ void SearchHandler::removeFromUsedIPAddresses(const std::string& ipAddressStr) c
     if (IPAddressWhitelist_.read(
             [ipAddressStr](const auto& ipWhitelist)
             {
-                return ipWhitelist.find(ipAddressStr) != ipWhitelist.end();
+                return ipWhitelist.contains(ipAddressStr);
             }))
     {
         return;
@@ -898,7 +922,7 @@ void SearchHandler::removeFromUsedIPAddresses(const std::string& ipAddressStr) c
     IPAddressesInUse_.write(
         [ipAddressStr](auto& ipAddrsInUse)
         {
-            if (ipAddrsInUse.find(ipAddressStr) != ipAddrsInUse.end())
+            if (ipAddrsInUse.contains(ipAddressStr))
             {
                 ipAddrsInUse[ipAddressStr] -= 1;
             }
@@ -922,7 +946,7 @@ void SearchHandler::addToUsedIPAddresses(const std::string& ipAddressStr) const
     if (IPAddressWhitelist_.read(
             [ipAddressStr](const auto& ipWhitelist)
             {
-                return ipWhitelist.find(ipAddressStr) != ipWhitelist.end();
+                return ipWhitelist.contains(ipAddressStr);
             }))
     {
         return;
@@ -931,7 +955,7 @@ void SearchHandler::addToUsedIPAddresses(const std::string& ipAddressStr) const
     IPAddressesInUse_.write(
         [ipAddressStr](auto& ipAddrsInUse)
         {
-            if (ipAddrsInUse.find(ipAddressStr) == ipAddrsInUse.end())
+            if (!ipAddrsInUse.contains(ipAddressStr))
             {
                 ipAddrsInUse[ipAddressStr] = 1;
             }
