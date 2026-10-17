@@ -1,4 +1,3 @@
-
 -----------------------------------
 -- Reverts out-of-era potency of various spells.
 -----------------------------------
@@ -26,11 +25,7 @@ local function castDia(caster, target, spell, tier, dotPower, duration, defenseD
 
         -- Apply Saboteur duration bonus.
         if caster:hasStatusEffect(xi.effect.SABOTEUR) then
-            if target:isNM() then
-                duration = duration * 1.25
-            else
-                duration = duration * 2
-            end
+            duration = duration * (target:isNM() and 1.25 or 2)
         end
 
         -- Apply RDM Enfeebling Magic Duration merits.
@@ -119,6 +114,85 @@ end)
 
 m:addOverride('xi.actions.spells.black.bio_iii.onSpellCast', function(caster, target, spell)
     return castBio(caster, target, spell, 6, 180, 15)
+end)
+
+-----------------------------------
+-- Enfeebling Magic: Blind and Poison
+-----------------------------------
+
+-- Poison / Poisonga / Poison II: Revert potency formula to pre-2015 values.
+-- Source: https://wiki.ffo.jp/html/833.html
+-- Source: https://forum.square-enix.com/ffxi/threads/46531-Mar-26-2015-%28JST%29-Version-Update
+local poisonPotency =
+{
+    [xi.magic.spell.POISON] =
+    {
+        { maxSkill = 79, potency = 1 },
+        { maxSkill = 159, potency = 2 },
+        { maxSkill = 239, potency = 3 },
+        { maxSkill = 999, potency = 4 },
+    },
+    [xi.magic.spell.POISONGA] =
+    {
+        { maxSkill = 79, potency = 1 },
+        { maxSkill = 159, potency = 2 },
+        { maxSkill = 239, potency = 3 },
+        { maxSkill = 999, potency = 4 },
+    },
+    [xi.magic.spell.POISON_II] =
+    {
+        { maxSkill = 124, potency = 4 },
+        { maxSkill = 149, potency = 5 },
+        { maxSkill = 174, potency = 6 },
+        { maxSkill = 199, potency = 7 },
+        { maxSkill = 224, potency = 8 },
+        { maxSkill = 249, potency = 9 },
+        { maxSkill = 999, potency = 10 },
+    },
+}
+
+-- Blind / Blind II: Revert post-2015 potency formula.
+-- Poison / Poison II / Poisonga: Revert post-2015 potency formula.
+-- Source: https://forum.square-enix.com/ffxi/threads/46531-Mar-26-2015-%28JST%29-Version-Update
+-- Source: https://wiki.ffo.jp/html/3596.html
+-- Dokumori: Ichi potency and duration is unchanged (-3/tick instead of -2/tick).
+-- Unrelated enfeebles retain their original calculations.
+m:addOverride('xi.spells.enfeebling.calculatePotency', function(caster, target, spellId, spellEffect, skillType, statUsed)
+    local potency
+
+    if
+        spellId == xi.magic.spell.BLIND or
+        spellId == xi.magic.spell.BLIND_II
+    then
+        local statDiff = caster:getStat(statUsed) - target:getStat(xi.mod.MND)
+        local offset = spellId == xi.magic.spell.BLIND_II and 100 or 60
+        potency = math.max(math.floor((statDiff + offset) / 4), 0)
+    elseif poisonPotency[spellId] then
+        local skillLevel = caster:getSkillLevel(skillType)
+        for _, entry in ipairs(poisonPotency[spellId]) do
+            if skillLevel <= entry.maxSkill then
+                potency = entry.potency
+                break
+            end
+        end
+    else
+        return super(caster, target, spellId, spellEffect, skillType, statUsed)
+    end
+
+    -- Preserve Saboteur multiplier and enfeebling potency gear.
+    -- All affected spells are Saboteur-eligible.
+    if
+        caster:hasStatusEffect(xi.effect.SABOTEUR) and
+        skillType == xi.skill.ENFEEBLING_MAGIC
+    then
+        if target:isNM() then
+            potency = math.floor(potency * (1.3 + caster:getMod(xi.mod.ENHANCES_SABOTEUR)))
+        else
+            potency = math.floor(potency * (2 + caster:getMod(xi.mod.ENHANCES_SABOTEUR)))
+        end
+    end
+
+    return math.floor(potency * (1 + caster:getMod(xi.mod.ENF_MAG_POTENCY) / 100))
 end)
 
 return m
