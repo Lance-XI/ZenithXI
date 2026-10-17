@@ -1,3 +1,4 @@
+
 -----------------------------------
 -- Reverts out-of-era potency of various spells.
 -----------------------------------
@@ -22,6 +23,23 @@ local function castDia(caster, target, spell, tier, dotPower, duration, defenseD
     then
         target:delStatusEffect(xi.effect.BIO)
         local power = dotPower + caster:getMod(xi.mod.DIA_DOT)
+
+        -- Apply Saboteur duration bonus.
+        if caster:hasStatusEffect(xi.effect.SABOTEUR) then
+            if target:isNM() then
+                duration = duration * 1.25
+            else
+                duration = duration * 2
+            end
+        end
+
+        -- Apply RDM Enfeebling Magic Duration merits.
+        if caster:getMainJob() == xi.job.RDM then
+            duration = duration + caster:getMerit(xi.merit.ENFEEBLING_MAGIC_DURATION)
+        end
+
+        -- Apply equipment and other enfeebling duration modifiers.
+        duration = math.floor(duration * (1 + caster:getMod(xi.mod.ENF_MAG_DURATION) / 100))
 
         target:addStatusEffect(xi.effect.DIA, { power = power, duration = duration, origin = caster, tick = 3, subPower = defenseDown, tier = tier })
     end
