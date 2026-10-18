@@ -1414,6 +1414,14 @@ for zoneId, mobNames in pairs(nmsToShield) do
             -- Never ensureTable a mob path: modules load before zone mobs, and an empty table
             -- there makes the engine discard the real scripts/zones/<Zone>/mobs/<Mob>.lua.
             -- The override defers and is applied once that script loads.
+            -- Some NMs (Nue, Crypt_Ghost) only exist in mobs.yaml and have no script to wait
+            -- for, so build their table here; with no file there is nothing to discard.
+            local script = io.open(string.format('scripts/zones/%s/mobs/%s.lua', zoneName, mobName), 'r')
+            if script then
+                io.close(script)
+            else
+                xi.module.ensureTable(mobPath)
+            end
 
             -- Add override using m:addOverride() for proper chaining
             m:addOverride(mobPath .. '.onMobInitialize', function(mob)
