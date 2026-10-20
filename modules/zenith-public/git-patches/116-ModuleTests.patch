@@ -1,0 +1,68 @@
+diff --git a/src/test/test_collector.cpp b/src/test/test_collector.cpp
+index 8bea74af6f..c26917559a 100644
+--- a/src/test/test_collector.cpp
++++ b/src/test/test_collector.cpp
+@@ -35,6 +35,9 @@ namespace
+ 
+ constexpr auto SUITES_PATH = "scripts/tests";
+ 
++// Modules can ship their own tests in modules/<module>/tests.
++constexpr auto MODULES_PATH = "modules";
++
+ } // namespace
+ 
+ TestCollector::TestCollector(const FilterConfig& filters, ReporterContainer& reporters)
+@@ -83,13 +86,29 @@ auto TestCollector::collectTestFiles() const -> std::vector<std::filesystem::pat
+     }
+ 
+     // Collect all .lua files and apply pattern filters
+-    for (const auto& entry : std::filesystem::recursive_directory_iterator(SUITES_PATH))
++    const auto collectFrom = [&](const std::filesystem::path& root)
+     {
+-        if (entry.is_regular_file())
++        for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
+         {
+-            if (const auto& path = entry.path(); path.extension() == ".lua" && !matcher_.shouldSkipFile(path))
++            if (entry.is_regular_file())
+             {
+-                luaFiles.push_back(path);
++                if (const auto& path = entry.path(); path.extension() == ".lua" && !matcher_.shouldSkipFile(path))
++                {
++                    luaFiles.push_back(path);
++                }
++            }
++        }
++    };
++
++    collectFrom(SUITES_PATH);
++
++    if (std::filesystem::exists(MODULES_PATH))
++    {
++        for (const auto& module : std::filesystem::directory_iterator(MODULES_PATH))
++        {
++            if (const auto testsPath = module.path() / "tests"; module.is_directory() && std::filesystem::is_directory(testsPath))
++            {
++                collectFrom(testsPath);
+             }
+         }
+     }
+@@ -105,9 +124,16 @@ void TestCollector::loadTestFile(const std::filesystem::path& filePath)
+     TracyZoneString(filePath.generic_string());
+ 
+     // Normalize path to forward slashes and build hierarchical suite name from path
+-    currentFile_                             = filePath.generic_string();
+-    const std::filesystem::path relativePath = std::filesystem::relative(filePath, SUITES_PATH);
+-    std::string                 pathSuiteName;
++    currentFile_                       = filePath.generic_string();
++    std::filesystem::path relativePath = std::filesystem::relative(filePath, SUITES_PATH);
++    std::string           pathSuiteName;
++
++    // modules/<module>/tests/<path>.lua is named modules::<module>::<path>
++    if (relativePath.empty() || *relativePath.begin() == "..")
++    {
++        const auto moduleName = *std::filesystem::relative(filePath, MODULES_PATH).begin();
++        relativePath          = std::filesystem::path(MODULES_PATH) / moduleName / std::filesystem::relative(filePath, std::filesystem::path(MODULES_PATH) / moduleName / "tests");
++    }
+ 
+     // Build suite name from folder path (excluding filename)
+     std::vector<std::string> pathComponents;
