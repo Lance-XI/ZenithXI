@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -36,6 +36,7 @@
 #include <common/types/hash_map.h>
 
 #include <array>
+#include <bit>
 #include <chrono>
 
 #include "map_constants.h"
@@ -76,6 +77,8 @@
 #include "ability.h"
 #include "alliance.h"
 #include "conquest_system.h"
+#include "data/datasets/experience/dataset.h"
+#include "data/datasets/monstrosity/dataset.h"
 #include "data/enums/mob_mod.h"
 #include "grades.h"
 #include "ipc_client.h"
@@ -84,6 +87,7 @@
 #include "latent_effect_container.h"
 #include "linkshell.h"
 #include "map_networking.h"
+#include "monstrosity.h"
 #include "nominate_manager.h"
 #include "recast_container.h"
 #include "roe.h"
@@ -94,6 +98,7 @@
 #include "treasure_pool.h"
 #include "unitychat.h"
 #include "universal_container.h"
+#include "utils/dataset_loader.h"
 #include "weapon_skill.h"
 #include "zone.h"
 
@@ -118,6 +123,8 @@
 #include "zoneutils.h"
 
 #include "data/enums/key_item.h"
+#include "enums/mission_log.h"
+#include "enums/msg_basic.h"
 #include "enums/quest_log.h"
 #include "items/item_furnishing.h"
 #include "items/item_linkshell.h"
@@ -148,7 +155,6 @@
 // Number of rows in the exp table
 static constexpr int32                               ExpTableRowCount = 60;
 std::array<std::array<uint16, 20>, ExpTableRowCount> g_ExpTable;
-std::array<uint16, 100>                              g_ExpPerLevel;
 
 std::vector<std::pair<uint16, EMobDifficulty>> ExpToDifficultyTable = {};
 // Eventually loaded as something like...
@@ -200,6 +206,12 @@ struct CharPointsQueries
 
 HashMap<std::string, CharPointsQueries> charPointsQueries;
 
+auto experience() -> const xi::data::Experience&
+{
+    static const auto data = xi::data::loadDataset<xi::data::datasets::experience::Dataset>();
+    return data;
+}
+
 } // namespace
 
 namespace charutils
@@ -226,14 +238,13 @@ void CalculateStats(CCharEntity* PChar)
         sjob = xi::Job::WAR;
     }
 
-    // NOTE: Monstrosity (MON) is treated as its own job, but each species is it's own
-    //     : combination of main/sub job for stats, traits and abilities.
     if (PChar->m_PMonstrosity != nullptr)
     {
-        mjob = PChar->m_PMonstrosity->MainJob;
-        sjob = PChar->m_PMonstrosity->SubJob;
-        mlvl = PChar->m_PMonstrosity->levels[PChar->m_PMonstrosity->MonstrosityId];
-        slvl = mlvl;
+        const auto species = monstrosity::GetSpeciesJobs(PChar);
+        mjob               = species.mainJob;
+        sjob               = species.subJob;
+        mlvl               = species.level;
+        slvl               = species.level;
     }
 
     uint8 race = 0; // Hume
@@ -284,6 +295,11 @@ void CalculateStats(CCharEntity* PChar)
         // Value output
         ref<uint16>(&PChar->stats, counter) = static_cast<uint16>(baseStat + meritBonus);
         counter += 2;
+    }
+
+    if (PChar->m_PMonstrosity != nullptr)
+    {
+        monstrosity::CalculateStats(PChar);
     }
 }
 
@@ -377,7 +393,7 @@ auto LoadFromCharsSQL(CCharEntity* PChar) -> void
         PChar->profile.home_point.p.y         = rset->get<float>("home_y");
         PChar->profile.home_point.p.z         = rset->get<float>("home_z");
 
-        PChar->profile.nation = rset->get<uint8>("nation");
+        PChar->profile.nation = rset->get<xi::Nation>("nation");
 
         db::extractFromBlob(rset, "quests", PChar->m_questLog);
         db::extractFromBlob(rset, "keyitems", PChar->keys);
@@ -534,33 +550,7 @@ auto LoadFromCharLookSQL(CCharEntity* PChar) -> void
         std::memcpy(&PChar->mainlook, &PChar->look, sizeof(PChar->look));
     }
 
-    // Model size doesn't matter here per caps, only race
-    // From the packets, size is 4/3/8 as integer
-    // For distance purposes, these are divided by 10
-    switch (static_cast<CharRace>(PChar->look.race))
-    {
-        case CharRace::HumeMale:
-        case CharRace::HumeFemale:
-            PChar->modelHitboxSize = 4.0f / 10.0f;
-            break;
-        case CharRace::ElvaanMale:
-        case CharRace::ElvaanFemale:
-            PChar->modelHitboxSize = 4.0f / 10.0f;
-            break;
-        case CharRace::TarutaruMale:
-        case CharRace::TarutaruFemale:
-            PChar->modelHitboxSize = 3.0f / 10.0f;
-            break;
-        case CharRace::Mithra:
-            PChar->modelHitboxSize = 4.0f / 10.0f;
-            break;
-        case CharRace::Galka:
-            PChar->modelHitboxSize = 8.0f / 10.0f;
-            break;
-        default:
-            PChar->modelHitboxSize = 4.0f / 10.0f;
-            break;
-    }
+    charutils::SetRaceHitbox(PChar);
 }
 
 auto LoadFromCharStyleSQL(CCharEntity* PChar) -> void
@@ -581,7 +571,7 @@ auto LoadFromCharStyleSQL(CCharEntity* PChar) -> void
 
 auto LoadFromCharJobsSQL(CCharEntity* PChar) -> void
 {
-    const auto rset = db::preparedStmt("SELECT unlocked, genkai, war, mnk, whm, blm, rdm, thf, pld, drk, bst, brd, rng, sam, nin, drg, smn, blu, cor, pup, dnc, sch, geo, run "
+    const auto rset = db::preparedStmt("SELECT unlocked, genkai, war, mnk, whm, blm, rdm, thf, pld, drk, bst, brd, rng, sam, nin, drg, smn, blu, cor, pup, dnc, sch, geo, run, mon "
                                        "FROM char_jobs "
                                        "WHERE charid = ?",
                                        PChar->id);
@@ -612,6 +602,7 @@ auto LoadFromCharJobsSQL(CCharEntity* PChar) -> void
         PChar->jobs.job[static_cast<uint8>(xi::Job::SCH)] = rset->get<uint8>("sch");
         PChar->jobs.job[static_cast<uint8>(xi::Job::GEO)] = rset->get<uint8>("geo");
         PChar->jobs.job[static_cast<uint8>(xi::Job::RUN)] = rset->get<uint8>("run");
+        PChar->jobs.job[static_cast<uint8>(xi::Job::MON)] = rset->get<uint8>("mon");
     }
 }
 
@@ -620,7 +611,7 @@ auto LoadFromCharExpSQL(CCharEntity* PChar) -> CharExpRow
     uint8  meritPoints = 0;
     uint16 limitPoints = 0;
 
-    const auto rset = db::preparedStmt("SELECT mode, war, mnk, whm, blm, rdm, thf, pld, drk, bst, brd, rng, sam, nin, drg, smn, blu, cor, pup, dnc, sch, geo, run, merits, limits "
+    const auto rset = db::preparedStmt("SELECT mode, war, mnk, whm, blm, rdm, thf, pld, drk, bst, brd, rng, sam, nin, drg, smn, blu, cor, pup, dnc, sch, geo, run, mon, merits, limits "
                                        "FROM char_exp "
                                        "WHERE charid = ?",
                                        PChar->id);
@@ -650,6 +641,7 @@ auto LoadFromCharExpSQL(CCharEntity* PChar) -> CharExpRow
         PChar->jobs.exp[static_cast<uint8>(xi::Job::SCH)] = rset->get<uint16>("sch");
         PChar->jobs.exp[static_cast<uint8>(xi::Job::GEO)] = rset->get<uint16>("geo");
         PChar->jobs.exp[static_cast<uint8>(xi::Job::RUN)] = rset->get<uint16>("run");
+        PChar->jobs.exp[static_cast<uint8>(xi::Job::MON)] = rset->get<uint16>("mon");
 
         meritPoints = rset->get<uint8>("merits");
         limitPoints = rset->get<uint16>("limits");
@@ -1242,6 +1234,24 @@ void LoadEquip(CCharEntity* PChar)
  *                                                                       *
  ************************************************************************/
 
+// Only race sets the hitbox, not model size.
+void SetRaceHitbox(CCharEntity* PChar)
+{
+    PChar->modelHitboxSize = [&]
+    {
+        switch (static_cast<CharRace>(PChar->look.race))
+        {
+            case CharRace::TarutaruMale:
+            case CharRace::TarutaruFemale:
+                return 3.0f / 10.0f;
+            case CharRace::Galka:
+                return 8.0f / 10.0f;
+            default:
+                return 4.0f / 10.0f;
+        }
+    }();
+}
+
 void SendQuestMissionLog(CCharEntity* PChar)
 {
     // Actual verified retail order.
@@ -1449,8 +1459,38 @@ void SendKeyItems(CCharEntity* PChar)
 
 void SendInventory(CCharEntity* PChar)
 {
+    // Visitors get the owner's installed furniture instead of their own safes, compacted to slots 1..N of the same safe
+    CCharEntity* PVisitedOwner = nullptr;
+    if (PChar->inMogHouse(xi::MogHouse::Visiting))
+    {
+        PVisitedOwner = PChar->moghouse().host();
+    }
+
+    auto pushVisitedFurniture = [&](auto LocationID)
+    {
+        uint8 slotID         = 1;
+        auto* PFurnitureSafe = PVisitedOwner->getStorage(LocationID);
+        PFurnitureSafe->ForEachItem(
+            [&](CItem* PItem)
+            {
+                if (PItem->isType(ITEM_FURNISHING) && static_cast<CItemFurnishing*>(PItem)->isInstalled())
+                {
+                    PChar->pushPacket<GP_SERV_COMMAND_ITEM_ATTR>(PItem, LocationID, slotID++);
+                }
+            });
+
+        PChar->inventorySyncState().markSynced(LocationID);
+        PChar->pushPacket<GP_SERV_COMMAND_ITEM_SAME>(LocationID, PChar);
+    };
+
     auto pushContainer = [&](auto LocationID)
     {
+        if (PVisitedOwner && (LocationID == LOC_MOGSAFE || LocationID == LOC_MOGSAFE2))
+        {
+            pushVisitedFurniture(LocationID);
+            return;
+        }
+
         CItemContainer* container = PChar->getStorage(LocationID);
         if (container == nullptr)
         {
@@ -1490,7 +1530,7 @@ void SendInventory(CCharEntity* PChar)
         }
     }
 
-    CItem* PItem = PChar->getEquip(SLOT_LINK1);
+    CItem* PItem = PChar->getLinkshell(SLOT_LINK1);
     if (PItem != nullptr)
     {
         auto eloc1 = PChar->equipLocation(SLOT_LINK1);
@@ -1500,7 +1540,7 @@ void SendInventory(CCharEntity* PChar)
         PChar->pushPacket<GP_SERV_COMMAND_GROUP_COMLINK>(PChar, 1);
     }
 
-    PItem = PChar->getEquip(SLOT_LINK2);
+    PItem = PChar->getLinkshell(SLOT_LINK2);
     if (PItem != nullptr)
     {
         auto eloc2 = PChar->equipLocation(SLOT_LINK2);
@@ -1588,9 +1628,11 @@ void SendUnityPackets(CCharEntity* PChar)
 // Send relevant 0x044 packets for extended job information (BLU spells, Automaton, Monstrosity)
 void SendExtendedJobPackets(CCharEntity* PChar)
 {
+    // A Monipulator is MON on both jobs, and retail describes each.
     if (PChar->m_PMonstrosity)
     {
-        PChar->pushPacket<GP_SERV_COMMAND_EXTENDED_JOB::MON>(PChar);
+        PChar->pushPacket<GP_SERV_COMMAND_EXTENDED_JOB::MON>(PChar, GP_SERV_COMMAND_EXTENDED_JOB::MON::IsSubJob::No);
+        PChar->pushPacket<GP_SERV_COMMAND_EXTENDED_JOB::MON>(PChar, GP_SERV_COMMAND_EXTENDED_JOB::MON::IsSubJob::Yes);
     }
     else
     {
@@ -3337,7 +3379,7 @@ void BuildingCharPetAbilityTable(CCharEntity* PChar, CPetEntity* PPet, uint32 Pe
             }
         }
     }
-    if (PPet->getPetType() == PET_TYPE::JUG_PET)
+    if (PPet->getPetType() == PET_TYPE::JUG_PET && !hasAbility(PChar, ABILITY_SIC) && PChar->GetMLevel() >= 25)
     {
         auto skillList{ battleutils::GetMobSkillList(PPet->m_MobSkillList) };
         for (auto&& abilityid : skillList)
@@ -3345,6 +3387,7 @@ void BuildingCharPetAbilityTable(CCharEntity* PChar, CPetEntity* PPet, uint32 Pe
             addPetAbility(PChar, abilityid - ABILITY_HEALING_RUBY);
         }
     }
+
     PChar->pushPacket<GP_SERV_COMMAND_COMMAND_DATA>(PChar);
 }
 
@@ -3365,6 +3408,50 @@ void BuildingCharAbilityTable(CCharEntity* PChar)
 
     std::memset(&PChar->m_Abilities, 0, sizeof(PChar->m_Abilities));
 
+    const auto learn = [&](CAbility* PAbility)
+    {
+        addAbility(PChar, PAbility->getID());
+        const auto* charge     = ability::GetCharge(PChar, static_cast<uint16>(PAbility->getRecastId()));
+        auto        chargeTime = timer::duration{ 0s };
+        auto        maxCharges = 0;
+        if (charge)
+        {
+            chargeTime = charge->chargeTime - std::chrono::seconds(PChar->PMeritPoints->GetMeritValue(static_cast<xi::Merit>(charge->merit), PChar));
+            maxCharges = charge->maxCharges;
+        }
+        if (charge || !PChar->PRecastContainer->Has(RECAST_ABILITY, PAbility->getRecastId()))
+        {
+            PChar->PRecastContainer->Add(RECAST_ABILITY, PAbility->getRecastId(), 0s, chargeTime, maxCharges);
+        }
+    };
+
+    // A Monipulator learns its species' main job abilities except Provoke, none from its sub job, and Relinquish.
+    if (PChar->m_PMonstrosity)
+    {
+        for (const auto job : { PChar->m_PMonstrosity->MainJob, xi::Job::MON })
+        {
+            for (auto* PAbility : ability::GetAbilities(job))
+            {
+                if (PAbility == nullptr)
+                {
+                    continue;
+                }
+
+                if (PChar->GetMLevel() < PAbility->getLevel())
+                {
+                    break;
+                }
+
+                if (PAbility->getID() < ABILITY_HEALING_RUBY && PAbility->getID() != ABILITY_PET_COMMANDS && PAbility->getID() != ABILITY_PROVOKE && CheckAbilityAddtype(PChar, PAbility))
+                {
+                    learn(PAbility);
+                }
+            }
+        }
+
+        return;
+    }
+
     for (auto PAbility : ability::GetAbilities(PChar->GetMJob()))
     {
         if (PAbility == nullptr)
@@ -3376,19 +3463,7 @@ void BuildingCharAbilityTable(CCharEntity* PChar)
         {
             if (PAbility->getID() < ABILITY_HEALING_RUBY && PAbility->getID() != ABILITY_PET_COMMANDS && CheckAbilityAddtype(PChar, PAbility))
             {
-                addAbility(PChar, PAbility->getID());
-                Charge_t*       charge     = ability::GetCharge(PChar, static_cast<uint16>(PAbility->getRecastId()));
-                timer::duration chargeTime = 0s;
-                auto            maxCharges = 0;
-                if (charge)
-                {
-                    chargeTime = charge->chargeTime - std::chrono::seconds(PChar->PMeritPoints->GetMeritValue(static_cast<xi::Merit>(charge->merit), PChar));
-                    maxCharges = charge->maxCharges;
-                }
-                if (!PChar->PRecastContainer->Has(RECAST_ABILITY, PAbility->getRecastId()))
-                {
-                    PChar->PRecastContainer->Add(RECAST_ABILITY, PAbility->getRecastId(), 0s, chargeTime, maxCharges);
-                }
+                learn(PAbility);
             }
         }
         else
@@ -3416,19 +3491,7 @@ void BuildingCharAbilityTable(CCharEntity* PChar)
             {
                 if (PAbility->getID() != ABILITY_PET_COMMANDS && CheckAbilityAddtype(PChar, PAbility) && !(PAbility->getAddType() & ADDTYPE_MAIN_ONLY))
                 {
-                    addAbility(PChar, PAbility->getID());
-                    Charge_t*       charge     = ability::GetCharge(PChar, static_cast<uint16>(PAbility->getRecastId()));
-                    timer::duration chargeTime = 0s;
-                    auto            maxCharges = 0;
-                    if (charge)
-                    {
-                        chargeTime = charge->chargeTime - std::chrono::seconds(PChar->PMeritPoints->GetMeritValue(static_cast<xi::Merit>(charge->merit), PChar));
-                        maxCharges = charge->maxCharges;
-                    }
-                    if (!PChar->PRecastContainer->Has(RECAST_ABILITY, PAbility->getRecastId()))
-                    {
-                        PChar->PRecastContainer->Add(RECAST_ABILITY, PAbility->getRecastId(), 0s, chargeTime, maxCharges);
-                    }
+                    learn(PAbility);
                 }
             }
         }
@@ -3578,16 +3641,10 @@ void BuildingCharSkillsTable(CCharEntity* PChar)
         // Main Job Skills.
         if (maxMainSkill != 0)
         {
-            if (currentSkill > maxMainSkill)
-            {
-                currentSkill = maxMainSkill;
-            }
+            currentSkill = std::min(currentSkill, maxMainSkill);
 
             int16 newSkillValue = currentSkill + skillBonus;
-            if (newSkillValue < 0)
-            {
-                newSkillValue = 0;
-            }
+            newSkillValue       = std::max<int16>(newSkillValue, 0);
 
             PChar->WorkingSkills.skill[i] = static_cast<uint16>(newSkillValue);
 
@@ -3600,16 +3657,10 @@ void BuildingCharSkillsTable(CCharEntity* PChar)
         // Sub Job Skills.
         else if (maxSubSkill != 0)
         {
-            if (currentSkill > maxSubSkill)
-            {
-                currentSkill = maxSubSkill;
-            }
+            currentSkill = std::min(currentSkill, maxSubSkill);
 
             int16 newSkillValue = currentSkill + skillBonus;
-            if (newSkillValue < 0)
-            {
-                newSkillValue = 0;
-            }
+            newSkillValue       = std::max<int16>(newSkillValue, 0);
 
             PChar->WorkingSkills.skill[i] = static_cast<uint16>(newSkillValue);
 
@@ -3622,10 +3673,7 @@ void BuildingCharSkillsTable(CCharEntity* PChar)
         // Job setup doesn't have this skill.
         else
         {
-            if (skillBonus < 0)
-            {
-                skillBonus = 0;
-            }
+            skillBonus                    = std::max<int16>(skillBonus, 0);
             PChar->WorkingSkills.skill[i] = static_cast<uint16>(skillBonus) | 0x8000; // New value AND Blue text.
         }
 
@@ -3660,6 +3708,27 @@ void BuildingCharSkillsTable(CCharEntity* PChar)
 
                 automatonSkillUpdated = true;
             }
+        }
+    }
+
+    // A Monipulator casts like a mob of its species: capped skill from its main job, else its sub job.
+    if (const auto* PMonipulator = monstrosity::AsMonipulator(PChar))
+    {
+        const auto species = monstrosity::GetSpeciesJobs(PMonipulator);
+        for (auto i = static_cast<int32>(xi::SkillType::DivineMagic); i <= static_cast<int32>(xi::SkillType::BlueMagic); ++i)
+        {
+            const auto type     = static_cast<xi::SkillType>(i);
+            const auto maxSkill = [&]() -> uint16
+            {
+                if (const auto mainSkill = battleutils::GetMaxSkill(type, species.mainJob, species.level); mainSkill != 0)
+                {
+                    return mainSkill;
+                }
+
+                return battleutils::GetMaxSkill(type, species.subJob, species.level);
+            }();
+
+            PChar->WorkingSkills.skill[i] = static_cast<uint16>(std::max(maxSkill + PChar->getMod(static_cast<xi::Mod>(i + 79)), 0));
         }
     }
 
@@ -3700,14 +3769,13 @@ void BuildingCharTraitsTable(CCharEntity* PChar)
     auto mlvl = PChar->GetMLevel();
     auto slvl = PChar->GetSLevel();
 
-    // NOTE: Monstrosity (MON) is treated as its own job, but each species is it's own
-    //     : combination of main/sub job for stats, traits and abilities.
     if (PChar->m_PMonstrosity != nullptr)
     {
-        mjob = PChar->m_PMonstrosity->MainJob;
-        sjob = PChar->m_PMonstrosity->SubJob;
-        mlvl = PChar->m_PMonstrosity->levels[PChar->m_PMonstrosity->MonstrosityId];
-        slvl = mlvl;
+        const auto species = monstrosity::GetSpeciesJobs(PChar);
+        mjob               = species.mainJob;
+        sjob               = species.subJob;
+        mlvl               = species.level;
+        slvl               = species.level;
     }
 
     battleutils::AddTraits(PChar, traits::GetTraits(mjob), mlvl);
@@ -3778,10 +3846,7 @@ void TrySkillUP(CCharEntity* PChar, xi::SkillType SkillID, uint8 lvl, bool force
 
         double random = xirand::GetRandomNumber(1.);
 
-        if (SkillUpChance > 0.5)
-        {
-            SkillUpChance = 0.5;
-        }
+        SkillUpChance = std::min(SkillUpChance, 0.5);
 
         // Check for skillup% bonus. https://www.bg-wiki.com/bg/Category:Skill_Up_Food
         // Assuming multiplicative even though rate is already a % because 0.5 + 0.8 would be > 1.
@@ -3838,30 +3903,20 @@ void TrySkillUP(CCharEntity* PChar, xi::SkillType SkillID, uint8 lvl, bool force
             // convert to 10th units
             CapSkill = CapSkill * 10;
 
-            int16 rovBonus = 1;
-
-            for (const auto skillupIncreaseKeyItem : skillupIncreaseKeyItems)
-            {
-                if (hasKeyItem(PChar, skillupIncreaseKeyItem))
-                {
-                    rovBonus += 1;
-                }
-            }
+            const auto rovBonus = static_cast<int16>(1 + std::ranges::count_if(skillupIncreaseKeyItems,
+                                                                               [&](const auto skillupIncreaseKeyItem)
+                                                                               {
+                                                                                   return hasKeyItem(PChar, skillupIncreaseKeyItem);
+                                                                               }));
 
             SkillAmount *= rovBonus;
-            if (SkillAmount > 9)
-            {
-                SkillAmount = 9;
-            }
+            SkillAmount = std::min<uint8>(SkillAmount, 9);
 
             // Do skill amount multiplier (Will only be applied if default setting is changed)
             if (settings::get<uint8>("map.SKILLUP_AMOUNT_MULTIPLIER") > 1)
             {
                 SkillAmount += (uint8)(SkillAmount * settings::get<uint8>("map.SKILLUP_AMOUNT_MULTIPLIER"));
-                if (SkillAmount > 9)
-                {
-                    SkillAmount = 9;
-                }
+                SkillAmount = std::min<uint8>(SkillAmount, 9);
             }
 
             if (SkillAmount + CurSkill >= CapSkill)
@@ -4241,31 +4296,16 @@ bool canUseWeaponSkill(CCharEntity* PChar, uint16 wsid)
 
 int32 hasTrait(CCharEntity* PChar, uint16 TraitID)
 {
-    if (PChar->objtype != TYPE_PC)
-    {
-        ShowError("charutils::hasTrait Attempt to reference a trait from a non-character entity: %s %i", PChar->name.c_str(), PChar->id);
-        return 0;
-    }
     return hasBit(TraitID, PChar->m_TraitList, sizeof(PChar->m_TraitList));
 }
 
 int32 addTrait(CCharEntity* PChar, uint16 TraitID)
 {
-    if (PChar->objtype != TYPE_PC)
-    {
-        ShowError("charutils::addTrait Attempt to reference a trait from a non-character entity: %s %i", PChar->name.c_str(), PChar->id);
-        return 0;
-    }
     return addBit(TraitID, PChar->m_TraitList, sizeof(PChar->m_TraitList));
 }
 
 int32 delTrait(CCharEntity* PChar, uint16 TraitID)
 {
-    if (PChar->objtype != TYPE_PC)
-    {
-        ShowError("charutils::delTrait Attempt to reference a trait from a non-character entity: %s %i", PChar->name.c_str(), PChar->id);
-        return 0;
-    }
     return delBit(TraitID, PChar->m_TraitList, sizeof(PChar->m_TraitList));
 }
 
@@ -4306,15 +4346,8 @@ void LoadExpTable()
         g_ExpTable = *baseTable;
     }
 
-    // Load the TNL (To Next Level) experience values from the database.
-    auto rset = db::preparedStmt("SELECT level, exp FROM exp_base LIMIT 100");
-    FOR_DB_MULTIPLE_RESULTS(rset)
-    {
-        if (const auto level = rset->get<uint8>("level") - 1; level < 100)
-        {
-            g_ExpPerLevel[level] = rset->get<uint16>("exp");
-        }
-    }
+    // pre-load exp tables
+    experience();
 
     // Load the /check experience difficulty curve
     auto expDifficultyCurveFunction = lua["xi"]["expDifficultyCurve"]["loadExpDifficultyCurve"];
@@ -4408,13 +4441,23 @@ uint32 GetBaseExp(uint8 charlvl, int16 moblvl)
  *                                                                       *
  ************************************************************************/
 
-uint32 GetExpNEXTLevel(uint8 charlvl)
+auto GetExpNEXTLevel(const uint8 charlvl) -> uint32
 {
-    if (charlvl > 0 && charlvl < 100)
+    if (charlvl < xi::data::kGrowthLevels)
     {
-        return g_ExpPerLevel[charlvl];
+        return experience().NextLevel[charlvl];
     }
     return 0;
+}
+
+auto GetExpNEXTLevelForChar(const CCharEntity* PChar, const uint8 charlvl) -> uint32
+{
+    if (PChar->m_PMonstrosity)
+    {
+        return monstrosity::GetExpNEXTLevel(charlvl);
+    }
+
+    return GetExpNEXTLevel(charlvl);
 }
 
 /************************************************************************
@@ -4558,10 +4601,10 @@ void DistributeExperiencePoints(CCharEntity* PChar, CMobEntity* PMob)
 {
     TracyZoneScoped;
 
-    uint8       pcinzone = 0;
-    uint8       minlevel = 0;
-    uint8       maxlevel = GetExpLevel(PChar);
-    REGION_TYPE region   = PChar->loc.zone->GetRegionID();
+    uint8      pcinzone = 0;
+    uint8      minlevel = 0;
+    uint8      maxlevel = GetExpLevel(PChar);
+    xi::Region region   = PChar->loc.zone->GetRegionID();
 
     if (PChar->PParty)
     {
@@ -4648,8 +4691,9 @@ void DistributeExperiencePoints(CCharEntity* PChar, CMobEntity* PMob)
             input.memberLevel        = memberlevel;
             input.highestMemberLevel = maxlevel;
             input.partySize          = pcinzone;
-            input.memberTNL          = GetExpNEXTLevel(memberlevel);
-            input.highestMemberTNL   = GetExpNEXTLevel(maxlevel);
+            // Monipulators only party with each other, so the whole party shares one curve.
+            input.memberTNL          = GetExpNEXTLevelForChar(PMember, memberlevel);
+            input.highestMemberTNL   = GetExpNEXTLevelForChar(PMember, maxlevel);
             input.regionId           = static_cast<uint8>(region);
             input.chainNumber        = PMember->expChain.chainNumber;
             input.chainActive        = chainActive;
@@ -4704,7 +4748,8 @@ void DistributeCapacityPoints(CCharEntity* PChar, CMobEntity* PMob)
                 return;
             }
 
-            if (!hasKeyItem(PMember, xi::KeyItem::JobBreaker) || PMember->GetMLevel() < 99)
+            // FFXIclopedia: Monipulators earn no capacity points.
+            if (PMember->m_PMonstrosity != nullptr || !hasKeyItem(PMember, xi::KeyItem::JobBreaker) || PMember->GetMLevel() < 99)
             {
                 // Do not grant Capacity points without Job Breaker or Level 99
                 return;
@@ -4765,7 +4810,7 @@ uint16 AddCapacityBonus(CCharEntity* PChar, uint16 capacityPoints)
 
     // COMMITMENT from Capacity Bands
 
-    if (PChar->StatusEffectContainer->GetStatusEffect(xi::StatusEffect::Commitment) && PChar->loc.zone->GetRegionID() != REGION_TYPE::ABYSSEA)
+    if (PChar->StatusEffectContainer->GetStatusEffect(xi::StatusEffect::Commitment) && PChar->loc.zone->GetRegionID() != xi::Region::Abyssea)
     {
         CStatusEffect* commitment = PChar->StatusEffectContainer->GetStatusEffect(xi::StatusEffect::Commitment);
         int16          percentage = commitment->GetPower();
@@ -5021,13 +5066,13 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
 
     // we check if the player is level capped and max exp..
     if (PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] > 74 && PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] >= PChar->jobs.genkai &&
-        PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] == GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) - 1)
+        PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] == GetExpNEXTLevelForChar(PChar, PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) - 1)
     {
         onLimitMode = true;
     }
 
-    // EXP scrolls cannot grant limit points.
-    if (!allowLimitPoints)
+    // EXP scrolls and Monipulators cannot gain limit points.
+    if (!allowLimitPoints || PChar->m_PMonstrosity)
     {
         onLimitMode = false;
     }
@@ -5091,10 +5136,10 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
 
     if (!expFromRaise && !fromScripts && awardRegionPoints)
     {
-        REGION_TYPE region = PChar->loc.zone->GetRegionID();
+        xi::Region region = PChar->loc.zone->GetRegionID();
 
         // Should this user be awarded conquest points..
-        if (PChar->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Signet) && (region >= REGION_TYPE::RONFAURE && region <= REGION_TYPE::JEUNO))
+        if (PChar->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Signet) && (region >= xi::Region::Ronfaure && region <= xi::Region::Jeuno))
         {
             // Add CP to the player.
             conquest::AddConquestPoints(PChar, exp);
@@ -5105,7 +5150,7 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
         }
 
         // Should this user be awarded imperial standing..
-        if (PChar->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Sanction) && (region >= REGION_TYPE::WEST_AHT_URHGAN && region <= REGION_TYPE::ALZADAAL))
+        if (PChar->StatusEffectContainer->HasStatusEffect(xi::StatusEffect::Sanction) && (region >= xi::Region::WestAhtUrhgan && region <= xi::Region::Alzadaal))
         {
             charutils::AddPoints(PChar, "imperial_standing", (int32)(exp * 0.1f));
             PChar->pushPacket<GP_SERV_COMMAND_CONQUEST>(PChar);
@@ -5115,7 +5160,7 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
 
         // Cruor Drops in Abyssea zones.
         const auto Pzone = PChar->getZone();
-        if (zoneutils::GetCurrentRegion(Pzone) == REGION_TYPE::ABYSSEA)
+        if (zoneutils::GetCurrentRegion(Pzone) == xi::Region::Abyssea)
         {
             uint16 TextID = luautils::GetTextIDVariable(Pzone, "CRUOR_OBTAINED");
             // uint32 Total  = charutils::GetPoints(PChar, "cruor");
@@ -5137,12 +5182,25 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
 
     PChar->PAI->EventHandler.triggerListener("EXPERIENCE_POINTS", PChar, PMob, exp);
 
+    // Only kills pay infamy and prestige.
+    if (!expFromRaise && !fromScripts)
+    {
+        if (PChar->m_PMonstrosity != nullptr)
+        {
+            monstrosity::AddInfamy(PChar, exp);
+        }
+        else
+        {
+            monstrosity::AddPrestige(PChar, exp);
+        }
+    }
+
     // Player levels up
-    if ((currentExp + exp) >= GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) && !onLimitMode)
+    if ((currentExp + exp) >= GetExpNEXTLevelForChar(PChar, PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) && !onLimitMode)
     {
         if (PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] >= PChar->jobs.genkai)
         {
-            PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] = GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) - 1;
+            PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] = GetExpNEXTLevelForChar(PChar, PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) - 1;
             if (PChar->PParty && PChar->PParty->GetSyncTarget() == PChar)
             {
                 PChar->PParty->SetSyncTarget("", MsgStd::LevelSyncRemoveIneligibleExp);
@@ -5150,12 +5208,16 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
         }
         else
         {
-            PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] -= GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]);
-            if (PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] >= GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] + 1))
+            PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] -= GetExpNEXTLevelForChar(PChar, PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]);
+            if (PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] >= GetExpNEXTLevelForChar(PChar, PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] + 1))
             {
-                PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] = GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] + 1) - 1;
+                PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] = GetExpNEXTLevelForChar(PChar, PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] + 1) - 1;
             }
             PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] += 1;
+            if (PChar->m_PMonstrosity)
+            {
+                monstrosity::HandleLevelUp(PChar);
+            }
 
             if (PChar->m_LevelRestriction == 0 || PChar->m_LevelRestriction > PChar->GetMLevel())
             {
@@ -5220,7 +5282,15 @@ void AddExperiencePoints(bool expFromRaise, bool awardRegionPoints, bool fromScr
     SaveCharExp(PChar, PChar->GetMJob());
     PChar->pushPacket<GP_SERV_COMMAND_CLISTATUS>(PChar);
 
-    if (onLimitMode)
+    if (PChar->m_PMonstrosity != nullptr)
+    {
+        // Retail refreshes the infamy shown in the Monstrosity menu on every gain.
+        PChar->pushPacket<GP_SERV_COMMAND_CLISTATUS2>(PChar);
+        PChar->pushPacket<GP_SERV_COMMAND_MISCDATA::MERITS>(PChar);
+        PChar->pushPacket<GP_SERV_COMMAND_MISCDATA::MONSTROSITY1>(PChar);
+        PChar->pushPacket<GP_SERV_COMMAND_MISCDATA::JOB_POINTS>(PChar);
+    }
+    else if (onLimitMode)
     {
         PChar->pushPacket<GP_SERV_COMMAND_MISCDATA::MERITS>(PChar);
         PChar->pushPacket<GP_SERV_COMMAND_MISCDATA::MONSTROSITY1>(PChar);
@@ -5770,11 +5840,8 @@ void SaveChatFilterFlags(CCharEntity* PChar)
 {
     TracyZoneScoped;
 
-    uint32_t filters1 = {};
-    uint32_t filters2 = {};
-
-    std::memcpy(&filters1, &PChar->playerConfig.MessageFilter, sizeof(uint32_t));
-    std::memcpy(&filters2, &PChar->playerConfig.MessageFilter2, sizeof(uint32_t));
+    const auto filters1 = std::bit_cast<uint32_t>(PChar->playerConfig.MessageFilter);
+    const auto filters2 = std::bit_cast<uint32_t>(PChar->playerConfig.MessageFilter2);
 
     db::preparedStmt("UPDATE chars "
                      "SET "
@@ -5867,12 +5934,6 @@ void SaveCharJob(const CCharEntity* PChar, const xi::Job job)
         return;
     }
 
-    // Monstrosity job and level data is handled elsewhere, bail out now
-    if (job == xi::Job::MON)
-    {
-        return;
-    }
-
     std::string fmtQuery = "";
 
     switch (job)
@@ -5943,6 +6004,9 @@ void SaveCharJob(const CCharEntity* PChar, const xi::Job job)
         case xi::Job::RUN:
             fmtQuery = "UPDATE char_jobs SET unlocked = ?, run = ? WHERE charid = ? LIMIT 1";
             break;
+        case xi::Job::MON:
+            fmtQuery = "UPDATE char_jobs SET unlocked = ?, mon = ? WHERE charid = ? LIMIT 1";
+            break;
         default:
             fmtQuery = "";
             break;
@@ -5958,12 +6022,6 @@ void SaveCharExp(const CCharEntity* PChar, const xi::Job job)
     if (job == xi::Job::NONE || static_cast<uint8>(job) >= MAX_JOBTYPE)
     {
         ShowWarningFmt("Attempt to save Char XP with invalid JOBTYPE {}.", static_cast<uint8>(job));
-        return;
-    }
-
-    // Monstrosity exp data is handled elsewhere, bail out now
-    if (job == xi::Job::MON)
-    {
         return;
     }
 
@@ -6036,6 +6094,9 @@ void SaveCharExp(const CCharEntity* PChar, const xi::Job job)
             break;
         case xi::Job::RUN:
             query = "UPDATE char_exp SET run = ?, merits = ?, limits = ? WHERE charid = ?";
+            break;
+        case xi::Job::MON:
+            query = "UPDATE char_exp SET mon = ?, merits = ?, limits = ? WHERE charid = ?";
             break;
         default:
             query = "";
@@ -6289,9 +6350,20 @@ void CheckUnarmedWeapon(CCharEntity* PChar)
 
     CItem* PSubslot = PChar->getEquip(SLOT_SUB);
 
-    // Main or sub job provides H2H skill, and sub slot is empty.
-    if ((battleutils::GetSkillRank(xi::SkillType::HandToHand, PChar->GetMJob()) > 0 || battleutils::GetSkillRank(xi::SkillType::HandToHand, PChar->GetSJob()) > 0) &&
-        (!PSubslot || !PSubslot->isType(ITEM_EQUIPMENT)))
+    const auto usesFists = [&]
+    {
+        // Only MNK species fight with fists.
+        if (PChar->m_PMonstrosity != nullptr)
+        {
+            return PChar->m_PMonstrosity->MainJob == xi::Job::MNK;
+        }
+
+        // Main or sub job provides H2H skill, and sub slot is empty.
+        return (battleutils::GetSkillRank(xi::SkillType::HandToHand, PChar->GetMJob()) > 0 || battleutils::GetSkillRank(xi::SkillType::HandToHand, PChar->GetSJob()) > 0) &&
+               (!PSubslot || !PSubslot->isType(ITEM_EQUIPMENT));
+    }();
+
+    if (usesFists)
     {
         PChar->m_Weapons[SLOT_MAIN] = xi::items::unarmedH2H();
         PChar->look.main            = 21; // The secret to H2H animations.  setModelId for UnarmedH2H didn't work.
@@ -6479,6 +6551,29 @@ void ClearTempItems(CCharEntity* PChar)
     Temp->Clear();
 }
 
+void LeaveParty(CCharEntity* PChar)
+{
+    if (PChar->PParty == nullptr)
+    {
+        return;
+    }
+
+    // A party of one leaves its alliance before it disbands.
+    if (PChar->PParty->m_PAlliance && PChar->PParty->HasOnlyOneMember())
+    {
+        if (PChar->PParty->m_PAlliance->hasOnlyOneParty())
+        {
+            PChar->PParty->m_PAlliance->dissolveAlliance();
+        }
+        else
+        {
+            PChar->PParty->m_PAlliance->removeParty(PChar->PParty);
+        }
+    }
+
+    PChar->PParty->RemoveMember(PChar);
+}
+
 void ReloadParty(CCharEntity* PChar)
 {
     TracyZoneScoped;
@@ -6528,6 +6623,13 @@ void ReloadParty(CCharEntity* PChar)
             }
 
             PParty->PushMember(PChar);
+
+            // A party saved before entering Monstrosity comes back here, after the job change.
+            if (!monstrosity::CanParty(PChar))
+            {
+                LeaveParty(PChar);
+                return;
+            }
 
             // Joins accepted on another process land here instead of CParty::AddMember
             if (PChar->isSeekingParty())
@@ -6684,6 +6786,12 @@ void SetPoints(CCharEntity* PChar, const char* type, int32 amount)
     {
         PChar->pushPacket<GP_SERV_COMMAND_UNITY>(PChar);
     }
+
+    // Spending infamy can lower a Monipulator's rank.
+    if (strcmp(type, "infamy") == 0 && PChar->m_PMonstrosity != nullptr)
+    {
+        monstrosity::UpdateRank(PChar, amount);
+    }
 }
 
 int32 GetPoints(CCharEntity* PChar, const char* type)
@@ -6745,11 +6853,11 @@ std::string GetConquestPointsName(CCharEntity* PChar)
 {
     switch (PChar->profile.nation)
     {
-        case 0:
+        case xi::Nation::Sandoria:
             return "sandoria_cp";
-        case 1:
+        case xi::Nation::Bastok:
             return "bastok_cp";
-        case 2:
+        case xi::Nation::Windurst:
             return "windurst_cp";
         default:
             ShowError("Invalid nation received, returning nothing.");
@@ -6893,8 +7001,8 @@ auto HomePoint(CCharEntity* PChar, bool resetHPMP) -> bool
         PChar->health.mp = PChar->GetMaxMP();
 
         // Homepointing increases beastmen influence.
-        const REGION_TYPE deathRegion = PChar->loc.zone->GetRegionID();
-        if (deathRegion <= REGION_TYPE::TAVNAZIA &&
+        const xi::Region deathRegion = PChar->loc.zone->GetRegionID();
+        if (deathRegion <= xi::Region::TavnazianArchipelago &&
             PChar->GetMLevel() >= settings::get<uint8>("map.MINIMUM_LEVEL_CONQUEST_INFUENCE_LOSS"))
         {
             conquest::AddPlayerHomepoints(1, deathRegion);
@@ -7419,7 +7527,7 @@ bool hasEntitySpawned(CCharEntity* PChar, CBaseEntity* entity)
     {
         spawnlist = &PChar->SpawnNPCList;
     }
-    else if (entity->objtype == TYPE_PC)
+    else if (dynamic_cast<const CCharEntity*>(entity) != nullptr)
     {
         spawnlist = &PChar->SpawnPCList;
     }
@@ -7582,6 +7690,13 @@ void removeCharFromZone(CCharEntity* PChar)
             PChar->resetPetZoningInfo();
         }
 
+        // accepting party requests does not survive a logout
+        if (PChar->playerConfig.RecruitFlg)
+        {
+            PChar->playerConfig.RecruitFlg = false;
+            SavePlayerSettings(PChar);
+        }
+
         PChar->PSession->shuttingDown = 1;
         db::preparedStmt("UPDATE char_stats SET zoning = 0 WHERE charid = ?", PChar->id);
     }
@@ -7608,9 +7723,10 @@ void removeCharFromZone(CCharEntity* PChar)
 
 void updateSession(MapSession* PSession, CCharEntity* PChar, CZone* currentZone)
 {
-    db::preparedStmt("UPDATE accounts_sessions SET targid = ?, server_addr = ?, client_port = ?, last_zoneout_time = 0 WHERE charid = ? LIMIT 1",
+    db::preparedStmt("UPDATE accounts_sessions SET targid = ?, server_addr = ?, client_addr = ?, client_port = ?, last_zoneout_time = 0 WHERE charid = ? LIMIT 1",
                      PChar->targid,
                      currentZone->GetIP(),
+                     PSession->client_ipp.getIP(),
                      PSession->client_ipp.getPort(),
                      PChar->id);
 }
@@ -7627,6 +7743,21 @@ void loadDeathTimestamp(CCharEntity* PChar)
             PChar->SetDeathTime(timer::time_point(timer::now() - secondsSinceDeath));
             PChar->Die(CCharEntity::death_duration - secondsSinceDeath);
         }
+    }
+}
+
+auto IsHomeNation(const xi::Nation nation, const xi::Region region) -> bool
+{
+    switch (region)
+    {
+        case xi::Region::Sandoria:
+            return nation == xi::Nation::Sandoria;
+        case xi::Region::Bastok:
+            return nation == xi::Nation::Bastok;
+        case xi::Region::Windurst:
+            return nation == xi::Nation::Windurst;
+        default:
+            return false;
     }
 }
 
@@ -7653,9 +7784,17 @@ bool isOrchestrionPlaced(CCharEntity* PChar)
 
 void updateMannequins(CCharEntity* PChar)
 {
+    auto* POwner = PChar->moghouse().host();
+    if (POwner == nullptr)
+    {
+        return;
+    }
+
     for (auto safeContainerId : { LOC_MOGSAFE, LOC_MOGSAFE2 })
     {
-        auto* PContainer = PChar->getStorage(safeContainerId);
+        // Visitors have the owner's installed furniture at slots 1..N, see SendInventory
+        uint8 visitorSlotID = 1;
+        auto* PContainer    = POwner->getStorage(safeContainerId);
         PContainer->ForEachItem(
             [&](CItem* PItem)
             {
@@ -7665,7 +7804,18 @@ void updateMannequins(CCharEntity* PChar)
                 }
 
                 auto* PFurnishing = static_cast<CItemFurnishing*>(PItem);
-                if (PFurnishing->isInstalled() && PFurnishing->isMannequin())
+                if (!PFurnishing->isInstalled())
+                {
+                    return;
+                }
+
+                uint8 slotID = PItem->getSlotID();
+                if (POwner != PChar)
+                {
+                    slotID = visitorSlotID++;
+                }
+
+                if (PFurnishing->isMannequin())
                 {
                     auto& mannequin = PFurnishing->exdata<Exdata::Mannequin>();
 
@@ -7674,7 +7824,7 @@ void updateMannequins(CCharEntity* PChar)
                         ShowWarning("Invalid Mannequin placed (race of 0 in exdata, when races start at 1). It will be unusable.");
                     }
 
-                    PChar->pushPacket<GP_SERV_COMMAND_ITEM_SUBCONTAINER>(PChar, safeContainerId, PItem->getSlotID(), mannequin);
+                    PChar->pushPacket<GP_SERV_COMMAND_ITEM_SUBCONTAINER>(POwner, safeContainerId, slotID, mannequin);
                 }
             });
     }

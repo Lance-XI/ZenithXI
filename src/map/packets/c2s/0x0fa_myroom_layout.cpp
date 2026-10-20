@@ -27,10 +27,12 @@
 #include "items/item_furnishing.h"
 #include "lua/luautils.h"
 #include "map/enums/furnishing_placement.h"
+#include "packets/c2s/validation.h"
 #include "packets/s2c/0x01c_item_max.h"
 #include "packets/s2c/0x01d_item_same.h"
 #include "packets/s2c/0x020_item_attr.h"
 #include "packets/s2c/0x0fa_myroom_operation.h"
+#include "zone.h"
 
 namespace
 {
@@ -101,8 +103,8 @@ auto collidesOnFloor(CItemFurnishing* other, const uint8 x, const uint8 z, const
         return false;
     }
 
-    // Stacked OnTable items live above the floor and don't conflict.
-    if (op == FurnishingPlacement::OnTable && other->getLevel() != 0)
+    // Stacked items live above the floor and don't conflict.
+    if (other->getLevel() != 0)
     {
         return false;
     }
@@ -149,7 +151,8 @@ auto GP_CLI_COMMAND_MYROOM_LAYOUT::validate(MapSession* PSession, const CCharEnt
 {
     return PacketValidator(PChar)
         .blockedBy({ BlockedState::InEvent })
-        .isInMogHouse()
+        .isInMogHouse(xi::MogHouse::Own)
+        .mustEqual(PChar->moghouse().isOpen(), false, "Mog House is open to visitors")
         .range("MyroomFloorFlg", this->MyroomFloorFlg, 0, 1) // Flag indicating if 2nd floor
         .range("v", this->v, 0, 3)                           // Rotation of the item (0-3)
         .range("y", this->y, 0, 25);                         // Stacking elevation (parent height / 10)

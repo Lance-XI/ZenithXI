@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2026 LandSandBoat Dev Teams
@@ -20,6 +20,8 @@
 */
 
 #pragma once
+
+#include <cstdint>
 
 // Alter Ego upgrade categories
 enum class AlterEgoCategory : uint8_t

@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -26,10 +26,12 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "entities/char_entity.h"
 #include "persist_batch.h"
+#include "zone.h"
 
 using Recalculate       = xi::Flag<struct RecalculateTag>;
 using IncludeRecycleBin = xi::Flag<struct IncludeRecycleBinTag>;
@@ -88,6 +90,7 @@ auto LoadChar(uint32 charId) -> std::unique_ptr<CCharEntity>;
 void LoadFromCharSpellsSQL(CCharEntity* PChar);
 void LoadInventory(CCharEntity* PChar);
 void LoadEquip(CCharEntity* PChar);
+void SetRaceHitbox(CCharEntity* PChar);
 
 void SendQuestMissionLog(CCharEntity* PChar);
 void SendPartialMissionLog(CCharEntity* PChar, MissionLog log, bool completed);
@@ -107,7 +110,8 @@ void SetLevelRestriction(CCharEntity* PChar, uint8 lvl);
 EMobDifficulty CheckMob(uint8 charlvl, CBattleEntity* PMob);
 
 uint32 GetBaseExp(uint8 charlvl, int16 moblvl);
-uint32 GetExpNEXTLevel(uint8 charlvl);
+auto   GetExpNEXTLevel(uint8 charlvl) -> uint32;
+auto   GetExpNEXTLevelForChar(const CCharEntity* PChar, uint8 charlvl) -> uint32;
 uint8  GetExpLevel(CBattleEntity* PMember);
 
 void DelExperiencePoints(CCharEntity* PChar, float retainpct, uint16 forcedXpLoss);
@@ -255,6 +259,7 @@ void RemoveAllEquipMods(CCharEntity* PChar);
 void ApplyAllEquipMods(CCharEntity* PChar);
 
 void ClearTempItems(CCharEntity* PChar);
+void LeaveParty(CCharEntity* PChar);
 void ReloadParty(CCharEntity* PChar);
 void RemoveSeekFlag(CCharEntity* PChar);
 
@@ -320,6 +325,7 @@ void updateSession(MapSession* PSession, CCharEntity* PChar, CZone* currentZone)
 void loadDeathTimestamp(CCharEntity* PChar);
 void loadZoningFlag(CCharEntity* PChar);
 
+auto IsHomeNation(xi::Nation nation, xi::Region region) -> bool;
 bool isOrchestrionPlaced(CCharEntity* PChar);
 void updateMannequins(CCharEntity* PChar);
 

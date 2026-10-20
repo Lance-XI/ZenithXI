@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -19,20 +19,28 @@
 ===========================================================================
 */
 
-#ifndef _CLUABASEENTITY_H
-#define _CLUABASEENTITY_H
+#pragma once
 
 #include "common/cbasetypes.h"
+#include "data/enums/behavior.h"
 #include "data/enums/entity_flags.h"
 #include "data/enums/fame_area.h"
 #include "data/enums/mob_mod.h"
+#include "data/enums/mob_type.h"
 #include "data/enums/music_slot.h"
+#include "data/enums/roam_flag.h"
+#include "data/enums/zone_misc.h"
 #include "enums/mission_log.h"
 #include "lua_trade_container.h"
-#include "luautils.h"
 #include "packets/s2c/0x009_message.h"
 #include "utils/battleutils.h"
 #include "utils/charutils.h"
+
+#include <sol/forward.hpp>
+
+#include <map>
+#include <string>
+#include <tuple>
 
 enum class QuestLog : uint8_t;
 enum class POSMODE : uint8;
@@ -68,7 +76,7 @@ public:
     void printToPlayer(const std::string& message, const sol::object& messageTypeObj, const sol::object& nameObj);
     void printToArea(const std::string& message, const sol::object& arg1, const sol::object& arg2, const sol::object& arg3, const sol::object& arg4);
     void messageBasic(uint16 messageID, const sol::object& p0, const sol::object& p1, const sol::object& target);
-    void messageName(uint16 messageID, const sol::object& entity, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& chat, const sol::object& sender);
+    void messageName(uint16 messageID, const sol::object& entity, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& chat, const sol::object& sender, const sol::object& showSender);
     void messagePublic(uint16 messageID, const CLuaBaseEntity* PEntity, const sol::object& arg2, const sol::object& arg3);
     void messageSpecial(uint16 messageID, sol::variadic_args va);
     void messageSystem(MsgStd messageID, const sol::object& p0, const sol::object& p1);
@@ -210,7 +218,10 @@ public:
     uint32 getPreviousZoneLineID();
     uint8  getCurrentRegion();
     uint8  getContinentID();
-    bool   inMogHouse();
+    auto   inMogHouse(sol::optional<xi::MogHouse> kind) -> bool;
+    auto   visitMogHouse(uint32 hostId, CLuaBaseEntity* PLuaNpc) -> bool;
+    auto   getMogHouseOwner() -> CBaseEntity*;
+    auto   getMogHouseVisitors() -> sol::table;
 
     bool isPlayerInTriggerArea(uint32 triggerAreaId);
     void onPlayerTriggerAreaEnter(uint32 triggerAreaId);
@@ -338,10 +349,10 @@ public:
     void   setCallForHelpBlocked(bool blocked);
 
     // Player Status
-    uint8 getNation();
-    void  setNation(uint8 nation);
-    auto  getAllegiance() -> xi::Allegiance;
-    void  setAllegiance(xi::Allegiance allegiance);
+    auto getNation() -> xi::Nation;
+    void setNation(xi::Nation nation);
+    auto getAllegiance() -> xi::Allegiance;
+    void setAllegiance(xi::Allegiance allegiance);
 
     uint8 getCampaignAllegiance();
     void  setCampaignAllegiance(uint8 allegiance);
@@ -398,8 +409,12 @@ public:
     void setMonstrosityData(sol::table table);
     bool getBelligerencyFlag();
     void setBelligerencyFlag(bool flag);
+    void changeMonstrositySpecies(uint16 speciesCode);
     auto getMonstrositySize() -> uint8;
     void setMonstrosityEntryData(float x, float y, float z, uint8 rot, uint16 zoneId, uint8 mjob, uint8 sjob);
+    auto getMonstrosityShop() -> sol::table;
+    auto getMonstrosityExits(xi::ZoneId zoneId) -> sol::table;
+    auto isMonstrosityPassageZone(xi::ZoneId zoneId) -> bool;
 
     // Player Titles and Fame
     uint16 getTitle();
@@ -413,7 +428,7 @@ public:
     void setFame(xi::FameArea area, uint16 fame);
     auto getFameLevel(xi::FameArea area) const -> uint8; // Gets Fame Level for specified nation
 
-    uint8  getRank(uint8 nation);
+    auto   getRank(xi::Nation nation) -> uint8;
     void   setRank(uint8 rank);
     uint16 getRankPoints();
     void   addRankPoints(uint16 rankpoints);
@@ -1004,5 +1019,3 @@ public:
 
     static void Register();
 };
-
-#endif

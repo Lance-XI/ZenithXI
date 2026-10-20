@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2023 LandSandBoat Dev Teams
@@ -37,8 +37,10 @@
 #include "data/enums/zone_type.h"
 #include "data/loader.h"
 
+#include <algorithm>
 #include <array>
 #include <fstream>
+#include <limits>
 #include <unordered_set>
 
 namespace loginHelpers
@@ -289,7 +291,7 @@ Maybe<std::string> validateCharacterName(const std::string& name)
         for (const auto& entry : badWordsList)
         {
             const auto badWord = to_upper(entry.second.as<std::string>());
-            if (potentialName.find(badWord) != std::string::npos)
+            if (potentialName.contains(badWord))
             {
                 return fmt::format("Name matched with bad words list <{}>.", badWord);
             }
@@ -325,6 +327,71 @@ auto characterCreationError(const uint32 accountID, const std::string& name) -> 
     }
 
     return std::nullopt;
+}
+
+namespace
+{
+
+// the map server shows the pass code as ten digits
+auto parseFriendPass(const std::string& friendPass) -> Maybe<uint32>
+{
+    if (friendPass.size() != 10 || friendPass.find_first_not_of("0123456789") != std::string::npos)
+    {
+        return std::nullopt;
+    }
+
+    const auto value = std::stoull(friendPass);
+    if (value == 0 || value > std::numeric_limits<uint32>::max())
+    {
+        return std::nullopt;
+    }
+
+    return static_cast<uint32>(value);
+}
+
+} // namespace
+
+auto friendPassError(const uint32 accountID, const std::string& friendPass) -> Maybe<uint16>
+{
+    const auto code = parseFriendPass(friendPass);
+    if (!code)
+    {
+        return loginErrors::errorCode::INCORRECT_WORLD_PASS;
+    }
+
+    const auto chars = db::preparedStmt("SELECT COUNT(*) AS chars FROM chars WHERE accid = ?", accountID);
+    if (!chars || !chars->next() || chars->get<uint32>("chars") != 0)
+    {
+        return loginErrors::errorCode::WORLD_PASS_FIRST_CHARACTER_ONLY;
+    }
+
+    const auto pass = db::preparedStmt("SELECT invitee IS NOT NULL AS used, expiry <= UNIX_TIMESTAMP() AS expired FROM char_world_passes WHERE code = ?", *code);
+    if (!pass || !pass->next() || pass->get<uint8>("used") != 0)
+    {
+        return loginErrors::errorCode::INCORRECT_WORLD_PASS;
+    }
+
+    if (pass->get<uint8>("expired") != 0)
+    {
+        return loginErrors::errorCode::WORLD_PASS_EXPIRED;
+    }
+
+    return std::nullopt;
+}
+
+void useFriendPass(const uint32 charID, const std::string& friendPass)
+{
+    const auto code = parseFriendPass(friendPass);
+    if (!code)
+    {
+        return;
+    }
+
+    const auto rset = db::preparedStmt("UPDATE char_world_passes SET invitee = ?, joined = UNIX_TIMESTAMP() WHERE code = ? AND invitee IS NULL AND expiry > UNIX_TIMESTAMP()", charID, *code);
+    if (rset && rset->rowsAffected())
+    {
+        ShowInfo(fmt::format("char {} joined with Gold World Pass {}", charID, *code));
+    }
 }
 
 // [ip_addr][session_hash] = session
@@ -389,10 +456,7 @@ bool isStringMalformed(const std::string& str, std::size_t max_length)
     const bool isEmpty   = str.empty();
     const bool isTooLong = str.size() > max_length;
 
-    const bool hasInvalidChar = std::any_of(
-        str.cbegin(),
-        str.cend(),
-        unprintableChar);
+    const bool hasInvalidChar = std::ranges::any_of(str, unprintableChar);
 
     return isEmpty || isTooLong || hasInvalidChar;
 }
@@ -629,7 +693,7 @@ int32 createCharacter(session_t& session, uint8* buf, lpkt_chr_info_sub2& charIn
 {
     char_mini createchar{};
 
-    std::memcpy(createchar.m_name, session.requestedNewCharacterName.c_str(), 16);
+    session.requestedNewCharacterName.copy(reinterpret_cast<char*>(createchar.m_name), sizeof(createchar.m_name) - 1);
 
     const auto charName = asStringFromUntrustedSource(createchar.m_name);
 
@@ -668,13 +732,7 @@ int32 createCharacter(session_t& session, uint8* buf, lpkt_chr_info_sub2& charIn
                              createchar.m_mjob));
     }
 
-    createchar.m_nation = ref<uint8>(buf, 54);
-
-    if (createchar.m_nation > 2) // 0x00 = San d'Oria, 0x01 = Bastok, 0x02 = Windurst
-    {
-        ShowError(fmt::format("{} attempted to create character with invalid nation {}", charName, createchar.m_nation));
-        return -1;
-    }
+    createchar.m_nation = static_cast<xi::Nation>(ref<uint8>(buf, 54));
 
     const std::vector<xi::ZoneId> bastokStartingZones   = { xi::ZoneId::BastokMines, xi::ZoneId::BastokMarkets, xi::ZoneId::PortBastok };
     const std::vector<xi::ZoneId> sandoriaStartingZones = { xi::ZoneId::SouthernSanDoria, xi::ZoneId::NorthernSanDoria, xi::ZoneId::PortSanDoria };
@@ -682,20 +740,25 @@ int32 createCharacter(session_t& session, uint8* buf, lpkt_chr_info_sub2& charIn
 
     switch (createchar.m_nation)
     {
-        case 0x02: // windy start
+        case xi::Nation::Windurst:
         {
             createchar.m_zone = windurstStartingZones[xirand::GetRandomNumber(3)];
             break;
         }
-        case 0x01: // bastok start
+        case xi::Nation::Bastok:
         {
             createchar.m_zone = bastokStartingZones[xirand::GetRandomNumber(3)];
             break;
         }
-        case 0x00: // sandy start
+        case xi::Nation::Sandoria:
         {
             createchar.m_zone = sandoriaStartingZones[xirand::GetRandomNumber(3)];
             break;
+        }
+        default:
+        {
+            ShowError(fmt::format("{} attempted to create character with invalid nation {}", charName, createchar.m_nation));
+            return -1;
         }
     }
 
@@ -740,7 +803,7 @@ int32 createCharacter(session_t& session, uint8* buf, lpkt_chr_info_sub2& charIn
 std::string getHashFromPacket(const std::string& ip_str, uint8* data)
 {
     auto hash = asStringFromUntrustedSource(data + 12, 16);
-    if (authenticatedSessions_[ip_str].find(hash) == authenticatedSessions_[ip_str].end())
+    if (!authenticatedSessions_[ip_str].contains(hash))
     {
         return "";
     }

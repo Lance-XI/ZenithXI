@@ -26,10 +26,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fmt/format.h>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace xi::data
@@ -37,6 +40,18 @@ namespace xi::data
 
 namespace
 {
+
+auto trimLine(const std::string_view line) -> std::string_view
+{
+    const auto first = line.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos)
+    {
+        return {};
+    }
+
+    const auto last = line.find_last_not_of(" \t\r\n");
+    return line.substr(first, last - first + 1);
+}
 
 auto readDocument(const std::string_view text) -> glz::generic_u64
 {
@@ -65,10 +80,10 @@ auto unquoteNumericKeys(std::string yaml) -> std::string
             const auto close = yaml.find('\'', start + 1);
             if (close != std::string::npos && close + 1 < end && yaml[close + 1] == ':' &&
                 close > start + 1 &&
-                std::all_of(yaml.begin() + start + 1, yaml.begin() + close, [](const char digit)
-                            {
-                                return std::isdigit(static_cast<unsigned char>(digit)) != 0;
-                            }))
+                std::ranges::all_of(yaml.begin() + start + 1, yaml.begin() + close, [](const char digit)
+                                    {
+                                        return std::isdigit(static_cast<unsigned char>(digit)) != 0;
+                                    }))
             {
                 yaml.erase(close, 1);
                 yaml.erase(start, 1);
@@ -100,6 +115,54 @@ auto slurp(const std::string_view path) -> std::string
 }
 
 } // namespace
+
+auto getDataModulePaths(const std::string_view name, const std::string_view extension) -> std::vector<std::string>
+{
+    std::vector<std::string> modules;
+    std::ifstream            file("./modules/init.txt", std::ios_base::in);
+    if (!file)
+    {
+        return modules;
+    }
+
+    std::unordered_set<std::string> seenPaths;
+    std::string                     line;
+    while (std::getline(file, line))
+    {
+        const auto trimmed = trimLine(line);
+        if (trimmed.empty() || trimmed[0] == '#')
+        {
+            continue;
+        }
+
+        const auto entry            = std::filesystem::path{ std::string{ trimmed } };
+        const auto explicitDataRoot = std::ranges::any_of(
+            entry,
+            [](const auto& component)
+            {
+                return component == "data";
+            });
+
+        auto dataRoot = std::filesystem::path{ "./modules" };
+        if (explicitDataRoot)
+        {
+            dataRoot /= entry;
+        }
+        else
+        {
+            dataRoot /= *entry.begin();
+            dataRoot /= "data";
+        }
+
+        const auto modulePath = (dataRoot / fmt::format("{}{}", name, extension)).generic_string();
+        if (seenPaths.insert(modulePath).second && std::filesystem::exists(modulePath))
+        {
+            modules.emplace_back(modulePath);
+        }
+    }
+
+    return modules;
+}
 
 auto mergeYaml(const std::string_view core, const std::span<const std::string> modules) -> std::string
 {

@@ -306,11 +306,11 @@ void CLuaSimulation::skipVanaDays(const uint32 days) const
  *  Notes   :
  ************************************************************************/
 
-void CLuaSimulation::setRegionOwner(REGION_TYPE region, NATION_TYPE nation) const
+void CLuaSimulation::setRegionOwner(const xi::Region region, const xi::Nation nation) const
 {
-    DebugTestFmt("Setting region {} owner to nation {}", static_cast<uint8>(region), static_cast<uint8>(nation));
+    DebugTestFmt("Setting region {} owner to nation {}", region, nation);
     auto rset = db::preparedStmt("UPDATE conquest_system SET region_control = ? WHERE region_id = ?",
-                                 static_cast<uint8>(nation),
+                                 nation,
                                  static_cast<uint8>(region));
 
     if (!rset)
@@ -327,8 +327,8 @@ void CLuaSimulation::setRegionOwner(REGION_TYPE region, NATION_TYPE nation) cons
         while (rset->next())
         {
             region_control_t regionControl{};
-            regionControl.current = rset->get<uint8>("region_control");
-            regionControl.prev    = rset->get<uint8>("region_control_prev");
+            regionControl.current = rset->get<xi::Nation>("region_control");
+            regionControl.prev    = rset->get<xi::Nation>("region_control_prev");
             controllers.emplace_back(regionControl);
         }
 
@@ -708,17 +708,36 @@ auto CLuaSimulation::getSpawnSlot(const xi::ZoneId zoneId, const uint32 slotId) 
 
     const auto& entries = slot->GetEntries();
     auto        i       = 1;
-    for (const auto& [mob, spawnChance] : entries)
+    for (const auto& entry : entries)
     {
-        if (mob)
+        if (entry.mob)
         {
-            result[i] = CLuaTestEntity(engine_->scheduler(), mob);
+            result[i] = CLuaTestEntity(engine_->scheduler(), entry.mob);
         }
 
         ++i;
     }
 
     return result;
+}
+
+/************************************************************************
+ *  Function: setSlotChance()
+ *  Purpose : Sets the percent chance a slotted mob wins its slot's roll.
+ *  Example : xi.test.world:setSlotChance(nm, 100)
+ *  Notes   : Lasts until the server restarts.
+ ************************************************************************/
+
+void CLuaSimulation::setSlotChance(CLuaBaseEntity& entity, const uint8 chance) const
+{
+    auto* PMob = dynamic_cast<CMobEntity*>(entity.GetBaseEntity());
+    if (!PMob || !PMob->GetSpawnSlot())
+    {
+        TestError("setSlotChance expects a slotted mob, got {}", entity.getName());
+        return;
+    }
+
+    PMob->GetSpawnSlot()->SetChance(PMob, chance);
 }
 
 void CLuaSimulation::Register()
@@ -738,4 +757,5 @@ void CLuaSimulation::Register()
     SOL_REGISTER("seed", CLuaSimulation::seed);
     SOL_REGISTER("spawnPlayer", CLuaSimulation::spawnPlayer);
     SOL_REGISTER("getSpawnSlot", CLuaSimulation::getSpawnSlot);
+    SOL_REGISTER("setSlotChance", CLuaSimulation::setSlotChance);
 };

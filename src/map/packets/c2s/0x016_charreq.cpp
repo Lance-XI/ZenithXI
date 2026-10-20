@@ -22,6 +22,7 @@
 #include "0x016_charreq.h"
 
 #include "entities/char_entity.h"
+#include "packets/c2s/validation.h"
 #include "packets/char_status.h"
 #include "utils/zoneutils.h"
 
@@ -52,19 +53,21 @@ void GP_CLI_COMMAND_CHARREQ::process(MapSession* PSession, CCharEntity* PChar) c
         return;
     }
 
-    if (PEntity->objtype == TYPE_PC)
+    if (auto* PCharEntity = dynamic_cast<CCharEntity*>(PEntity))
     {
         // Char we want an update for
-        if (auto* PCharEntity = dynamic_cast<CCharEntity*>(PEntity))
+        if (PCharEntity->m_isGMHidden)
         {
-            if (PCharEntity->m_isGMHidden)
-            {
-                ShowErrorFmt("Player {} requested information about a hidden GM ({}) using targid {}", PChar->getName(), PCharEntity->getName(), this->ActIndex);
-                return;
-            }
-
-            PChar->updateEntityPacket(PCharEntity, ENTITY_SPAWN, UPDATE_ALL_CHAR);
+            ShowErrorFmt("Player {} requested information about a hidden GM ({}) using targid {}", PChar->getName(), PCharEntity->getName(), this->ActIndex);
+            return;
         }
+
+        if (PCharEntity->m_moghouseID != PChar->m_moghouseID)
+        {
+            return;
+        }
+
+        PChar->updateEntityPacket(PCharEntity, ENTITY_SPAWN, UPDATE_ALL_CHAR);
     }
     else // TYPE_NPC
     {

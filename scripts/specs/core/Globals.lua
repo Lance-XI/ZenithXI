@@ -66,19 +66,19 @@ function WeekUpdateConquest(updateType)
 end
 
 ---@nodiscard
----@param type integer
----@return integer
-function GetRegionOwner(type)
+---@param region xi.region
+---@return xi.nation
+function GetRegionOwner(region)
 end
 
 ---@nodiscard
----@param type integer
+---@param region xi.region
 ---@return integer
-function GetRegionInfluence(type)
+function GetRegionInfluence(region)
 end
 
 ---@nodiscard
----@param nation integer
+---@param nation xi.nation
 ---@return integer
 function GetNationRank(nation)
 end
@@ -168,6 +168,58 @@ end
 ---@nodiscard
 ---@return integer
 function GetSystemTime()
+end
+
+---@class ChocoboRacerStats
+---@field str integer
+---@field ["end"] integer
+---@field dsc integer
+---@field rcp integer
+
+---@class ChocoboRacer : ChocoboRaceEntry
+---@field name string
+---@field item xi.chocoboRacing.sectionEvent
+---@field orders xi.chocoboRacing.order
+---@field size xi.chocoboRacing.jockeySize
+---@field color xi.chocoboRaising.color
+---@field gender xi.chocoboRaising.gender
+---@field weather xi.chocoboRaising.weather
+---@field temperament xi.chocoboRaising.temperament
+---@field ability1 xi.chocoboRaising.ability
+---@field ability2 xi.chocoboRaising.ability
+---@field stats ChocoboRacerStats
+
+---@class ChocoboRaceResult
+---@field raceNo integer
+---@field weather integer
+---@field places integer[]? 0-based place of each chocobo, once the race has run
+---@field runAt integer? 0 until the race has run
+---@field intro integer[]? Values sent with each half of the field, once the race has run
+---@field chocobos ChocoboRacer[]
+---@field sections ChocoboRaceSection[]? The race sections, once the race has run
+
+---@nodiscard
+---@param raceNo integer
+---@return ChocoboRaceResult?
+function LoadChocoboRaceResult(raceNo)
+end
+
+---@param data ChocoboRaceResult
+---@return nil
+function SaveChocoboRaceResult(data)
+end
+
+---@nodiscard
+---@param raceNo integer
+---@return integer[] quills Quills on each of the 28 quinella pairs
+function GetChocoboRaceQuills(raceNo)
+end
+
+---@param raceNo integer
+---@param pair integer 0-27 in toteboard order
+---@param quills integer
+---@return nil
+function AddChocoboRaceQuills(raceNo, pair, quills)
 end
 
 ---@class LinkshellConciergeSlotRow
@@ -385,6 +437,47 @@ end
 ---@param varName string
 ---@return integer
 function GetVolatileServerVariable(varName)
+end
+
+---@class WorldPass
+---@field code integer
+---@field expiry integer
+
+---@class WorldPassInvite
+---@field joined integer
+---@field inviteeClaims integer
+---@field inviterClaims integer
+
+---@nodiscard
+---@param inviterId integer
+---@return WorldPass?
+function GetActiveWorldPass(inviterId)
+end
+
+---@param inviterId integer
+---@param expiry integer
+---@return integer
+function IssueWorldPass(inviterId, expiry)
+end
+
+---@nodiscard
+---@param inviterId integer
+---@param inviteeId integer
+---@return WorldPassInvite?
+function GetWorldPassInvite(inviterId, inviteeId)
+end
+
+---@param inviteeId integer
+---@param inviteeClaims integer
+---@param inviterClaims integer
+---@return nil
+function SetWorldPassClaims(inviteeId, inviteeClaims, inviterClaims)
+end
+
+---@nodiscard
+---@param inviterId integer
+---@return integer
+function CountWorldPassInvites(inviterId)
 end
 
 ---@param name string

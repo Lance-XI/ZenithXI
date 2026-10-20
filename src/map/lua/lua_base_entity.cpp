@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -38,6 +38,7 @@
 #include "aman.h"
 #include "battlefield.h"
 #include "conquest_system.h"
+#include "data/datasets/monstrosity/dataset.h"
 #include "data/enums/mob_mod.h"
 #include "enmity_container.h"
 #include "fishingcontest.h"
@@ -51,6 +52,7 @@
 #include "mob_spell_container.h"
 #include "mob_spell_list.h"
 #include "mobskill.h"
+#include "monstrosity.h"
 #include "notoriety_container.h"
 #include "recast_container.h"
 #include "roe.h"
@@ -153,6 +155,9 @@
 #include "packets/s2c/0x0f9_res.h"
 #include "packets/s2c/0x119_abil_recast.h"
 
+#include "enums/msg_basic.h"
+#include "lua/lua_base_entity.h"
+#include "utils/attackutils.h"
 #include "utils/battleutils.h"
 #include "utils/blueutils.h"
 #include "utils/charutils.h"
@@ -167,6 +172,7 @@
 #include "utils/puppetutils.h"
 #include "utils/trustutils.h"
 #include "utils/zoneutils.h"
+#include "ximesh/ximesh.h"
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -485,11 +491,12 @@ void CLuaBaseEntity::messageBasic(uint16 messageID, const sol::object& p0, const
 /************************************************************************
  *  Function: messageName()
  *  Purpose : Message displayed with an entity's name in it
- *  Example : target:messageName(messageID, entity, param0, param1, param2, param3, chatType, sender);
+ *  Example : target:messageName(messageID, entity, param0, param1, param2, param3, chatType, sender, showSender);
  *  Notes   : Used in Doom countdown messages, as an example
+ *          : showSender defaults to true when a sender is given
  ************************************************************************/
 
-void CLuaBaseEntity::messageName(uint16 messageID, const sol::object& entity, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& chat, const sol::object& sender)
+void CLuaBaseEntity::messageName(uint16 messageID, const sol::object& entity, const sol::object& p0, const sol::object& p1, const sol::object& p2, const sol::object& p3, const sol::object& chat, const sol::object& sender, const sol::object& showSender)
 {
     CLuaBaseEntity* PLuaEntity  = (entity != sol::lua_nil) ? entity.as<CLuaBaseEntity*>() : nullptr;
     CBaseEntity*    PNameEntity = PLuaEntity ? PLuaEntity->m_PBaseEntity : nullptr;
@@ -514,7 +521,13 @@ void CLuaBaseEntity::messageName(uint16 messageID, const sol::object& entity, co
         }();
         CBaseEntity* PSender = PLuaSender ? PLuaSender->m_PBaseEntity : PChar;
 
-        PChar->pushPacket<GP_SERV_COMMAND_TALKNUMWORK2>(PSender, messageID, PNameEntity, param0, param1, param2, param3, chatType, PLuaSender != nullptr);
+        bool showSpeaker = PLuaSender != nullptr;
+        if (showSender != sol::lua_nil)
+        {
+            showSpeaker = showSender.as<bool>();
+        }
+
+        PChar->pushPacket<GP_SERV_COMMAND_TALKNUMWORK2>(PSender, messageID, PNameEntity, param0, param1, param2, param3, chatType, showSpeaker);
     }
     else if (m_PBaseEntity->loc.zone)
     {
@@ -841,7 +854,7 @@ void CLuaBaseEntity::clearLocalVarsWithPrefix(const std::string& prefix)
 {
     for (const auto& [localVar, _] : m_PBaseEntity->GetLocalVars())
     {
-        if (starts_with(localVar, prefix))
+        if (localVar.starts_with(prefix))
         {
             m_PBaseEntity->SetLocalVar(localVar, 0);
         }
@@ -1195,23 +1208,19 @@ void CLuaBaseEntity::sendChocoboRace(const sol::table& race) const
         return;
     }
 
-    // Read a 1-indexed lua table of per-chocobo values (positions or places) into a fixed array.
-    const auto readNibbles = [](const sol::table& values) -> std::array<uint8, GP_SERV_COMMAND_CHOCOBO_RACING::kNumRacers>
-    {
-        std::array<uint8, GP_SERV_COMMAND_CHOCOBO_RACING::kNumRacers> out{};
-        for (uint8 racer = 0; racer < GP_SERV_COMMAND_CHOCOBO_RACING::kNumRacers; ++racer)
-        {
-            out[racer] = values.get_or<uint8>(racer + 1, 0);
-        }
-
-        return out;
-    };
+    const auto chocobos = race.get<sol::optional<sol::table>>("chocobos");
 
     // Mode 1: Race parameters
-    PChar->pushPacket<GP_SERV_COMMAND_CHOCOBO_RACING::RACINGPARAMS>(race.get_or<uint32>("weather", 1), race.get_or<uint32>("counter", 0)); // 1 = xi.weather.SUNSHINE (clear)
+    uint32 entrants = GP_SERV_COMMAND_CHOCOBO_RACING::kNumRacers;
+    if (chocobos)
+    {
+        entrants = static_cast<uint32>(std::min<size_t>(chocobos->size(), GP_SERV_COMMAND_CHOCOBO_RACING::kNumRacers));
+    }
+
+    PChar->pushPacket<GP_SERV_COMMAND_CHOCOBO_RACING::RACINGPARAMS>(race.get_or<uint32>("weather", 1), entrants, race.get_or<uint32>("counter", 0)); // 1 = xi.weather.SUNSHINE (clear)
 
     // Mode 2: Racing Chocobos
-    if (const auto chocobos = race.get<sol::optional<sol::table>>("chocobos"))
+    if (chocobos)
     {
         const auto                                                count = std::min<size_t>(chocobos->size(), GP_SERV_COMMAND_CHOCOBO_RACING::kNumRacers);
         std::vector<GP_SERV_COMMAND_CHOCOBO_RACING::ChocoboParam> entries(count);
@@ -1232,19 +1241,7 @@ void CLuaBaseEntity::sendChocoboRace(const sol::table& race) const
 
         for (size_t idx = 1; idx <= sectionCount; ++idx)
         {
-            const auto sec     = raceSections->get<sol::table>(idx);
-            auto&      section = sections[idx - 1];
-
-            GP_SERV_COMMAND_CHOCOBO_RACING::packNibbles(section.From, readNibbles(sec.get<sol::table>("from")));
-            GP_SERV_COMMAND_CHOCOBO_RACING::packNibbles(section.To, readNibbles(sec.get<sol::table>("to")));
-
-            if (const auto event = sec.get<sol::optional<sol::table>>("trigger"))
-            {
-                section.Trigger.User    = event->get_or<uint8>("user", 0);
-                section.Trigger.Targets = event->get_or<uint8>("targets", 0);
-                section.Trigger.Param   = event->get_or<uint8>("param", 0);
-                section.Trigger.Type    = static_cast<GP_SERV_COMMAND_CHOCOBO_RACING::SectionEventType>(event->get_or<uint8>("type", 0));
-            }
+            sections[idx - 1] = GP_SERV_COMMAND_CHOCOBO_RACING::SectionParam::fromLua(raceSections->get<sol::table>(idx));
         }
 
         // Each packet carries up to kSectionsPerPacket sections;
@@ -1261,7 +1258,7 @@ void CLuaBaseEntity::sendChocoboRace(const sol::table& race) const
     // Mode 4: Final race results.
     if (const auto places = race.get<sol::optional<sol::table>>("places"))
     {
-        PChar->pushPacket<GP_SERV_COMMAND_CHOCOBO_RACING::RESULTPARAMS>(readNibbles(*places));
+        PChar->pushPacket<GP_SERV_COMMAND_CHOCOBO_RACING::RESULTPARAMS>(GP_SERV_COMMAND_CHOCOBO_RACING::readNibbles(*places));
     }
 
     // Mode 5: Notify client exchange is done.
@@ -3232,12 +3229,12 @@ uint8 CLuaBaseEntity::getContinentID()
 
 /************************************************************************
  *  Function: inMogHouse()
- *  Purpose : Returns true if a PC is in their Mog House
- *  Example : if player:inMogHouse() then -- watch Netflix and chill
+ *  Purpose : Returns true if a PC is in a Mog House, any by default
+ *  Example : if player:inMogHouse(xi.mogHouse.OWN) then
  *  Notes   :
  ************************************************************************/
 
-bool CLuaBaseEntity::inMogHouse()
+auto CLuaBaseEntity::inMogHouse(sol::optional<xi::MogHouse> kind) -> bool
 {
     if (m_PBaseEntity->objtype != TYPE_PC)
     {
@@ -3245,7 +3242,74 @@ bool CLuaBaseEntity::inMogHouse()
         return false;
     }
 
-    return static_cast<CCharEntity*>(m_PBaseEntity)->inMogHouse();
+    return static_cast<CCharEntity*>(m_PBaseEntity)->inMogHouse(kind.value_or(xi::MogHouse::Any));
+}
+
+/************************************************************************
+ *  Function: visitMogHouse()
+ *  Purpose : Sends a PC to a party/alliance member's open Mog House
+ *  Example : player:visitMogHouse(option, npc)
+ *  Notes   : Validates the host, returns false if refused
+ ************************************************************************/
+
+auto CLuaBaseEntity::visitMogHouse(uint32 hostId, CLuaBaseEntity* PLuaNpc) -> bool
+{
+    if (m_PBaseEntity->objtype != TYPE_PC)
+    {
+        ShowWarning("Invalid entity type calling function (%s).", m_PBaseEntity->getName());
+        return false;
+    }
+
+    if (PLuaNpc == nullptr)
+    {
+        ShowWarning("No NPC given (%s).", m_PBaseEntity->getName());
+        return false;
+    }
+
+    return static_cast<CCharEntity*>(m_PBaseEntity)->moghouse().visit(hostId, PLuaNpc->GetBaseEntity());
+}
+
+/************************************************************************
+ *  Function: getMogHouseOwner()
+ *  Purpose : Returns the owner of the Mog House the PC is in (themselves when at home)
+ *  Example : local owner = player:getMogHouseOwner()
+ *  Notes   : nil when not in a Mog House
+ ************************************************************************/
+
+auto CLuaBaseEntity::getMogHouseOwner() -> CBaseEntity*
+{
+    if (m_PBaseEntity->objtype != TYPE_PC)
+    {
+        ShowWarning("Invalid entity type calling function (%s).", m_PBaseEntity->getName());
+        return nullptr;
+    }
+
+    return static_cast<CCharEntity*>(m_PBaseEntity)->moghouse().host();
+}
+
+/************************************************************************
+ *  Function: getMogHouseVisitors()
+ *  Purpose : Returns the PCs visiting this PC's Mog House
+ *  Example : for _, visitor in ipairs(player:getMogHouseVisitors()) do
+ *  Notes   :
+ ************************************************************************/
+
+auto CLuaBaseEntity::getMogHouseVisitors() -> sol::table
+{
+    auto table = lua.create_table();
+
+    auto* PChar = dynamic_cast<CCharEntity*>(m_PBaseEntity);
+    if (PChar == nullptr)
+    {
+        return table;
+    }
+
+    for (auto* PVisitor : PChar->moghouse().visitors())
+    {
+        table.add(CLuaBaseEntity(PVisitor));
+    }
+
+    return table;
 }
 
 /************************************************************************
@@ -4368,13 +4432,13 @@ auto CLuaBaseEntity::getEquippedItem(uint8 slot) -> CItem*
             return nullptr;
         }
 
-        auto* PChar    = static_cast<CCharEntity*>(m_PBaseEntity);
-        auto* slotItem = PChar->getEquip(static_cast<SLOTTYPE>(slot));
-
-        if (slotItem)
+        auto* PChar = static_cast<CCharEntity*>(m_PBaseEntity);
+        if (slot >= SLOT_LINK1)
         {
-            return slotItem;
+            return PChar->getLinkshell(static_cast<SLOTTYPE>(slot));
         }
+
+        return PChar->getEquip(static_cast<SLOTTYPE>(slot));
     }
 
     return nullptr;
@@ -5734,9 +5798,13 @@ auto CLuaBaseEntity::getStorageItem(uint8 container, uint8 slotID, uint8 equipID
             PItem = PStorage->GetItem(slotID);
         }
     }
+    else if (equipID >= SLOT_LINK1)
+    {
+        PItem = PChar->getLinkshell(static_cast<SLOTTYPE>(equipID));
+    }
     else
     {
-        PItem = PChar->getEquip((SLOTTYPE)equipID);
+        PItem = PChar->getEquip(static_cast<SLOTTYPE>(equipID));
     }
 
     return PItem;
@@ -6453,12 +6521,12 @@ void CLuaBaseEntity::setCallForHelpBlocked(bool blocked)
  *  Notes   :
  ************************************************************************/
 
-uint8 CLuaBaseEntity::getNation()
+auto CLuaBaseEntity::getNation() -> xi::Nation
 {
     if (m_PBaseEntity->objtype != TYPE_PC)
     {
         ShowWarning("Invalid entity type calling function (%s).", m_PBaseEntity->getName());
-        return 0;
+        return xi::Nation::Sandoria;
     }
 
     return static_cast<CCharEntity*>(m_PBaseEntity)->profile.nation;
@@ -6471,7 +6539,7 @@ uint8 CLuaBaseEntity::getNation()
  *  Notes   :
  ************************************************************************/
 
-void CLuaBaseEntity::setNation(uint8 nation)
+void CLuaBaseEntity::setNation(const xi::Nation nation)
 {
     if (m_PBaseEntity->objtype != TYPE_PC)
     {
@@ -6765,16 +6833,9 @@ void CLuaBaseEntity::setGMHidden(bool isHidden)
 
     db::preparedStmt("UPDATE char_flags SET gmHiddenEnabled = ? WHERE charid = ?", isHidden ? 1 : 0, PChar->id);
 
-    if (PChar->loc.zone)
+    if (PChar->loc.zone && PChar->m_isGMHidden)
     {
-        if (PChar->m_isGMHidden)
-        {
-            PChar->loc.zone->UpdateEntityPacket(PChar, ENTITY_DESPAWN, UPDATE_NONE);
-        }
-        else
-        {
-            PChar->loc.zone->UpdateEntityPacket(PChar, ENTITY_SPAWN, UPDATE_NONE);
-        }
+        PChar->loc.zone->UpdateEntityPacket(PChar, ENTITY_DESPAWN, UPDATE_NONE);
     }
 }
 
@@ -7059,6 +7120,9 @@ void CLuaBaseEntity::changeJob(uint8 newJob)
         charutils::RemoveAllEquipMods(PChar);
         PChar->jobs.unlocked |= (1 << newJob);
         PChar->SetMJob(newJob);
+
+        monstrosity::HandleJobChange(PChar, static_cast<xi::Job>(newJob));
+
         charutils::ApplyAllEquipMods(PChar);
         puppetutils::LoadAutomaton(PChar);
 
@@ -7359,7 +7423,15 @@ void CLuaBaseEntity::setLevel(uint8 level)
         PChar->SetMLevel(level);
         PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())] = level;
         PChar->SetSLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetSJob())]);
-        PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] = charutils::GetExpNEXTLevel(PChar->jobs.job[static_cast<uint8>(PChar->GetMJob())]) - 1;
+
+        // A Monipulator's level lives per species, so record it there or zoning restores the old one.
+        if (PChar->m_PMonstrosity)
+        {
+            PChar->m_PMonstrosity->levels[PChar->m_PMonstrosity->MonstrosityId] = level;
+            monstrosity::WriteMonstrosityData(PChar);
+        }
+
+        PChar->jobs.exp[static_cast<uint8>(PChar->GetMJob())] = charutils::GetExpNEXTLevelForChar(PChar, level) - 1;
         charutils::ApplyAllEquipMods(PChar);
 
         charutils::SetStyleLock(PChar, false);
@@ -7668,22 +7740,12 @@ sol::table CLuaBaseEntity::getMonstrosityData()
         return sol::lua_nil;
     }
 
-    bool startsWithMonstrosityData = PChar->m_PMonstrosity != nullptr;
-    if (!startsWithMonstrosityData)
+    if (PChar->m_PMonstrosity != nullptr)
     {
-        monstrosity::ReadMonstrosityData(PChar);
+        return luautils::GetMonstrosityLuaTable(*PChar->m_PMonstrosity);
     }
 
-    auto table = luautils::GetMonstrosityLuaTable(PChar);
-
-    // If we didn't start with Monstrosity data, we should wipe it out now so we
-    // don't change modes
-    if (!startsWithMonstrosityData)
-    {
-        PChar->m_PMonstrosity = nullptr;
-    }
-
-    return table;
+    return luautils::GetMonstrosityLuaTable(*monstrosity::LoadMonstrosityData(PChar->id));
 }
 
 void CLuaBaseEntity::setMonstrosityData(sol::table table)
@@ -7694,25 +7756,18 @@ void CLuaBaseEntity::setMonstrosityData(sol::table table)
         return;
     }
 
-    bool startsWithMonstrosityData = PChar->m_PMonstrosity != nullptr;
-
-    // NOTE: This will populate m_PMonstrosity if it doesn't exist
-    monstrosity::ReadMonstrosityData(PChar);
-
-    luautils::SetMonstrosityLuaTable(PChar, std::move(table));
-
-    monstrosity::WriteMonstrosityData(PChar);
-
-    // If we didn't start with Monstrosity data, we should wipe it out now so we
-    // don't change modes
-    if (!startsWithMonstrosityData)
+    if (PChar->m_PMonstrosity != nullptr)
     {
-        PChar->m_PMonstrosity = nullptr;
-    }
-    else
-    {
+        luautils::SetMonstrosityLuaTable(*PChar->m_PMonstrosity, std::move(table));
+        monstrosity::WriteMonstrosityData(PChar);
         monstrosity::SendFullMonstrosityUpdate(PChar);
+        return;
     }
+
+    // Outside MON only the saved progress changes.
+    auto data = monstrosity::LoadMonstrosityData(PChar->id);
+    luautils::SetMonstrosityLuaTable(*data, std::move(table));
+    monstrosity::SaveMonstrosityData(PChar->id, *data);
 }
 
 bool CLuaBaseEntity::getBelligerencyFlag()
@@ -7742,6 +7797,18 @@ void CLuaBaseEntity::setBelligerencyFlag(bool flag)
     monstrosity::SetBelligerencyFlag(PChar, flag);
 }
 
+// Takes a species the Monipulator owns, as the Feretory menu would.
+void CLuaBaseEntity::changeMonstrositySpecies(const uint16 speciesCode)
+{
+    auto* PChar = dynamic_cast<CCharEntity*>(m_PBaseEntity);
+    if (PChar == nullptr || PChar->m_PMonstrosity == nullptr)
+    {
+        return;
+    }
+
+    monstrosity::ChangeSpecies(PChar, speciesCode);
+}
+
 auto CLuaBaseEntity::getMonstrositySize() -> uint8
 {
     auto* PChar = dynamic_cast<CCharEntity*>(m_PBaseEntity);
@@ -7766,28 +7833,79 @@ void CLuaBaseEntity::setMonstrosityEntryData(float x, float y, float z, uint8 ro
         return;
     }
 
-    bool startsWithMonstrosityData = PChar->m_PMonstrosity != nullptr;
-    if (!startsWithMonstrosityData)
+    // Outside MON only the saved progress changes.
+    auto  loaded = std::unique_ptr<monstrosity::MonstrosityData_t>{};
+    auto* data   = PChar->m_PMonstrosity.get();
+    if (data == nullptr)
     {
-        monstrosity::ReadMonstrosityData(PChar);
+        loaded = monstrosity::LoadMonstrosityData(PChar->id);
+        data   = loaded.get();
     }
 
-    PChar->m_PMonstrosity->EntryPos.x        = x;
-    PChar->m_PMonstrosity->EntryPos.y        = y;
-    PChar->m_PMonstrosity->EntryPos.z        = z;
-    PChar->m_PMonstrosity->EntryPos.rotation = rot;
-    PChar->m_PMonstrosity->EntryZoneId       = zoneId;
-    PChar->m_PMonstrosity->EntryMainJob      = mjob;
-    PChar->m_PMonstrosity->EntrySubJob       = sjob;
+    data->EntryPos.x        = x;
+    data->EntryPos.y        = y;
+    data->EntryPos.z        = z;
+    data->EntryPos.rotation = rot;
+    data->EntryZoneId       = zoneId;
+    data->EntryMainJob      = mjob;
+    data->EntrySubJob       = sjob;
 
-    monstrosity::WriteMonstrosityData(PChar);
+    monstrosity::SaveMonstrosityData(PChar->id, *data);
+}
 
-    // If we didn't start with Monstrosity data, we should wipe it out now so we
-    // don't change modes
-    if (!startsWithMonstrosityData)
+auto CLuaBaseEntity::getMonstrosityShop() -> sol::table
+{
+    auto shop = lua.create_table();
+    for (const auto& [page, slots] : monstrosity::GetStaticData().teyrnonShop)
     {
-        PChar->m_PMonstrosity = nullptr;
+        auto pageTable = lua.create_table();
+        for (std::size_t slotIdx = 0; slotIdx < slots.size(); ++slotIdx)
+        {
+            const auto& slot = slots[slotIdx];
+
+            auto requirements = lua.create_table();
+            for (const auto& [family, level] : slot.requirements)
+            {
+                requirements.add(lua.create_table_with(1, static_cast<uint8>(family), 2, level));
+            }
+
+            auto slotTable            = lua.create_table();
+            slotTable["infamyCost"]   = slot.infamy;
+            slotTable["requirements"] = requirements;
+            if (slot.species)
+            {
+                slotTable["monSpecies"] = static_cast<uint8>(*slot.species);
+            }
+
+            if (slot.variant)
+            {
+                slotTable["monVariant"] = static_cast<uint8>(*slot.variant);
+            }
+
+            pageTable[slotIdx] = slotTable;
+        }
+
+        shop[page] = pageTable;
     }
+
+    return shop;
+}
+
+auto CLuaBaseEntity::isMonstrosityPassageZone(const xi::ZoneId zoneId) -> bool
+{
+    return monstrosity::IsPassageZone(zoneId);
+}
+
+auto CLuaBaseEntity::getMonstrosityExits(const xi::ZoneId zoneId) -> sol::table
+{
+    auto exits = lua.create_table();
+
+    for (const auto& [x, y, z, rot] : monstrosity::GetFeretoryExits(zoneId))
+    {
+        exits.add(lua.create_table_with(1, x, 2, y, 3, z, 4, static_cast<uint8>(rot)));
+    }
+
+    return exits;
 }
 
 /************************************************************************
@@ -8160,7 +8278,7 @@ auto CLuaBaseEntity::getFameLevel(const xi::FameArea area) const -> uint8
  *  Example : player:getRank(xi.nation.WINDURST)
  ************************************************************************/
 
-uint8 CLuaBaseEntity::getRank(uint8 nation)
+auto CLuaBaseEntity::getRank(const xi::Nation nation) -> uint8
 {
     if (m_PBaseEntity->objtype != TYPE_PC)
     {
@@ -8170,7 +8288,7 @@ uint8 CLuaBaseEntity::getRank(uint8 nation)
 
     auto* PChar = static_cast<CCharEntity*>(m_PBaseEntity);
 
-    return PChar->profile.rank[nation];
+    return PChar->profile.rank[static_cast<uint8>(nation)];
 }
 
 /************************************************************************
@@ -8189,7 +8307,7 @@ void CLuaBaseEntity::setRank(uint8 rank)
 
     auto* PChar = static_cast<CCharEntity*>(m_PBaseEntity);
 
-    PChar->profile.rank[PChar->profile.nation] = rank;
+    PChar->profile.rank[static_cast<uint8>(PChar->profile.nation)] = rank;
 
     charutils::SaveMissionsList(PChar);
 }
@@ -12237,7 +12355,7 @@ void CLuaBaseEntity::disableLevelSync()
 
     if (PChar->loc.zone)
     {
-        PChar->loc.zone->PushPacket(PChar, CHAR_INRANGE, std::make_unique<CCharSyncPacket>(PChar));
+        PChar->loc.zone->PushPacket(PChar, CHAR_INRANGE, std::make_unique<CCharSyncPacket>(PChar, CharSyncRecipient::Others));
     }
 }
 
@@ -20843,6 +20961,9 @@ void CLuaBaseEntity::Register()
     SOL_REGISTER("getCurrentRegion", CLuaBaseEntity::getCurrentRegion);
     SOL_REGISTER("getContinentID", CLuaBaseEntity::getContinentID);
     SOL_REGISTER("inMogHouse", CLuaBaseEntity::inMogHouse);
+    SOL_REGISTER("visitMogHouse", CLuaBaseEntity::visitMogHouse);
+    SOL_REGISTER("getMogHouseOwner", CLuaBaseEntity::getMogHouseOwner);
+    SOL_REGISTER("getMogHouseVisitors", CLuaBaseEntity::getMogHouseVisitors);
 
     SOL_REGISTER("getPos", CLuaBaseEntity::getPos);
     SOL_REGISTER("showPosition", CLuaBaseEntity::showPosition);
@@ -21015,8 +21136,12 @@ void CLuaBaseEntity::Register()
     SOL_REGISTER("setMonstrosityData", CLuaBaseEntity::setMonstrosityData);
     SOL_REGISTER("getBelligerencyFlag", CLuaBaseEntity::getBelligerencyFlag);
     SOL_REGISTER("setBelligerencyFlag", CLuaBaseEntity::setBelligerencyFlag);
+    SOL_REGISTER("changeMonstrositySpecies", CLuaBaseEntity::changeMonstrositySpecies);
     SOL_REGISTER("getMonstrositySize", CLuaBaseEntity::getMonstrositySize);
     SOL_REGISTER("setMonstrosityEntryData", CLuaBaseEntity::setMonstrosityEntryData);
+    SOL_REGISTER("getMonstrosityShop", CLuaBaseEntity::getMonstrosityShop);
+    SOL_REGISTER("getMonstrosityExits", CLuaBaseEntity::getMonstrosityExits);
+    SOL_REGISTER("isMonstrosityPassageZone", CLuaBaseEntity::isMonstrosityPassageZone);
 
     // Player Titles and Fame
     SOL_REGISTER("getTitle", CLuaBaseEntity::getTitle);

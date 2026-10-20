@@ -22,6 +22,7 @@
 #include "0x0eb_reqsubmapnum.h"
 
 #include "entities/char_entity.h"
+#include "packets/c2s/validation.h"
 #include "packets/s2c/0x10e_reqsubmapnum.h"
 
 auto GP_CLI_COMMAND_REQSUBMAPNUM::validate(MapSession* PSession, const CCharEntity* PChar) const -> PacketValidationResult
@@ -31,11 +32,5 @@ auto GP_CLI_COMMAND_REQSUBMAPNUM::validate(MapSession* PSession, const CCharEnti
 
 void GP_CLI_COMMAND_REQSUBMAPNUM::process(MapSession* PSession, CCharEntity* PChar) const
 {
-    // TODO: Highly doubt that's the correct implementation.
-    if (!PChar->isNpcLocked())
-    {
-        return;
-    }
-
-    PChar->pushPacket<GP_SERV_COMMAND_REQSUBMAPNUM>(0);
+    PChar->pushPacket<GP_SERV_COMMAND_REQSUBMAPNUM>(PChar->loc.boundary);
 }

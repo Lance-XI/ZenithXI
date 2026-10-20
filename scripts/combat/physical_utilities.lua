@@ -904,6 +904,23 @@ xi.combat.physical.calculateRangedPDIF = function(actor, target, weaponType, wsA
 
     if not actor:isMob() then
         distancePenalty = xi.combat.ranged.attackDistancePenalty(actor, target)
+    else
+        local distance               = actor:checkDistance(target)
+        local meleeRange             = actor:getMeleeRange(target)
+        local distancePastMeleeRange = math.max(distance - meleeRange, 0)
+
+        -- Apply -5/256 attack multiplier per 1 yalm up to 10 yalms for a max of 50/256
+        -- 0.1 through 1.0 yalms is the floor of -5/256
+        -- Jimmayus' research shows its not actually 5/256 per 1 yalm, i've left it here for reference
+        -- The specific per-distance block values at -5/-5/-5/-5/-5/-5/-6/-5/-5/-4
+        -- ToAU and later:                           -2/-3/-2/-3/-2/-3/-4/-2/-2/-2
+        if distancePastMeleeRange >= 0.1 then
+            local penalty = utils.clamp(5 / 256 * math.floor(distancePastMeleeRange), 5 / 256, 50 / 256)
+
+            -- TODO: ToAU and later halve this mod
+            -- TODO: is this multiplicative with wsAttackMod instead? Normally it is 1.0. There are very few ranged moves.
+            wsAttackMod = wsAttackMod - penalty
+        end
     end
 
     -- Actor Weaponskill Specific Attack modifiers.
@@ -1246,7 +1263,7 @@ xi.combat.physical.canParry = function(defender, attacker)
                 canParry = mainWeapon:getSkillType() ~= xi.skill.HAND_TO_HAND
             end
         else
-            canParry = defender:getMobMod(xi.mobMod.CAN_PARRY) > 0
+            canParry = defender:getMobMod(xi.mobMod.CAN_PARRY) > 0 and not defender:isUsingH2H()
         end
     end
 
@@ -1309,8 +1326,7 @@ xi.combat.physical.canGuard = function(defender, attacker)
     -- https://genomeffxi.livejournal.com/18269.html
     if
         defender:isFacing(attacker) and
-        defender:isEngaged() and
-        not defender:hasPreventActionEffect(true) -- Not stunned, slept, etc, but can guard when charmed
+        defender:isEngaged()
     then
         if defender:isPC() and defender:getSkillRank(xi.skill.GUARD) > 0 then
             local mainWeapon = defender:getEquippedItem(xi.slot.MAIN)
@@ -1461,6 +1477,7 @@ xi.combat.physical.calculateBlockRate = function(defender, attacker)
     return blockRate
 end
 
+-- Returns a number to reduce block damage by
 xi.combat.physical.getDamageReductionForBlock = function(defender, attacker, damage)
     -- save original damage for comparison
     local originalDamage = damage
@@ -1477,6 +1494,8 @@ xi.combat.physical.getDamageReductionForBlock = function(defender, attacker, dam
         else
             damage = math.floor(damage * 0.5)
         end
+    else
+        return 0 -- Return no reduction if damage is <= 0
     end
 
     -- return the difference between original and new damage

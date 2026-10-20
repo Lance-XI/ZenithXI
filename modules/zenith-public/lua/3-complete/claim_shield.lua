@@ -1403,6 +1403,38 @@ end
 
 local nmCount = 0
 
+local fileExists = function(path)
+    local file = io.open(path, 'r')
+    if file then
+        io.close(file)
+        return true
+    end
+
+    return false
+end
+
+-- data/zones folders are lowercase, which matters on Linux.
+-- A mob's script table is named after its mobs.yaml template ("  Nue:"), or after the
+-- script a spawn names when that differs ("    script:   Gyre-Carlin")
+local yamlHasMob = function(zoneName, mobName)
+    local file = io.open(string.format('data/zones/%s/mobs.yaml', string.lower(zoneName)), 'r')
+    if not file then
+        return false
+    end
+
+    local templateLine = string.format('  %s:', mobName)
+    local found        = false
+    for line in file:lines() do
+        if line == templateLine or line:match('^%s+script:%s+(.-)%s*$') == mobName then
+            found = true
+            break
+        end
+    end
+
+    io.close(file)
+    return found
+end
+
 for zoneId, mobNames in pairs(nmsToShield) do
     local zoneName = zxi.zoneName[zoneId]
     if not zoneName then
@@ -1414,6 +1446,17 @@ for zoneId, mobNames in pairs(nmsToShield) do
             -- Never ensureTable a mob path: modules load before zone mobs, and an empty table
             -- there makes the engine discard the real scripts/zones/<Zone>/mobs/<Mob>.lua.
             -- The override defers and is applied once that script loads.
+            -- Some NMs (Nue, Crypt_Ghost) only exist in mobs.yaml and have no script to wait
+            -- for, so build their table here; with no file there is nothing to discard.
+            -- Only when mobs.yaml really has the NM: for a renamed or misspelled NM the
+            -- override must stay unresolved so the engine logs "Override not applied".
+            if not fileExists(string.format('scripts/zones/%s/mobs/%s.lua', zoneName, mobName)) then
+                if yamlHasMob(zoneName, mobName) then
+                    xi.module.ensureTable(mobPath)
+                else
+                    print(string.format('[claim_shield] Warning: %s has no mob script and no mobs.yaml entry in %s', mobName, zoneName))
+                end
+            end
 
             -- Add override using m:addOverride() for proper chaining
             m:addOverride(mobPath .. '.onMobInitialize', function(mob)

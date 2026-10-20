@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -19,8 +19,7 @@
 ===========================================================================
 */
 
-#ifndef _CTRADECONTAINER_H
-#define _CTRADECONTAINER_H
+#pragma once
 
 #include "common/cbasetypes.h"
 #include <variant>
@@ -88,5 +87,3 @@ private:
     std::vector<uint32>          m_quantity;
     std::vector<SlotRestriction> restrictions_;
 };
-
-#endif

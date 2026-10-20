@@ -27,6 +27,7 @@
 #include "ship.h"
 #include "voyage.h"
 
+#include <unordered_map>
 #include <vector>
 
 class CZone;
@@ -37,6 +38,8 @@ public:
     void InitializeShips();
     void tick();
 
+    auto voyageAt(const CZone* PZone, uint32 now) const -> const Voyage*; // leg carrying riders through the zone right now, if any
+
 protected:
     ShipHandler() = default;
 
@@ -44,6 +47,7 @@ private:
     void registerShip(const xi::data::TransportData& entry, CZone* PDockZone);
     void registerVoyage(const xi::data::TransportData& entry);
 
-    std::vector<Ship>   ships_;
-    std::vector<Voyage> voyages_;
+    std::vector<Ship>                          ships_;
+    std::vector<Voyage>                        voyages_;
+    std::unordered_map<CZone*, VoyageEndState> voyageEndStates_;
 };

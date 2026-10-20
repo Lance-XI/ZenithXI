@@ -72,7 +72,9 @@ xi.combat.tp.getModifiedDelayAndCanZanshin = function(actor, delay)
     local canZanshin    = false
 
     -- DW/H2H delay is halved for the purposes of a single hit's TP return when applicable, see https://www.bg-wiki.com/ffxi/Tactical_Points
-    if actor:isDualWielding() then -- NOTE: this 'isDualWielding' may trip on non-PCs even if they are 'using h2h'. If this is rectified in core in the future this should fall through correctly.
+    if actor:getMainJob() == xi.job.MON then -- A Monipulator's base delay is already per hit.
+        canZanshin = true
+    elseif actor:isDualWielding() then -- NOTE: this 'isDualWielding' may trip on non-PCs even if they are 'using h2h'. If this is rectified in core in the future this should fall through correctly.
         modifiedDelay = (delay * (100 - actor:getMod(xi.mod.DUAL_WIELD)) / 100) / 2
     elseif actor:isUsingH2H() then
         if actor:getObjType() == xi.objType.PC then -- handle h2h with > 1 swing only on PC
@@ -85,7 +87,10 @@ xi.combat.tp.getModifiedDelayAndCanZanshin = function(actor, delay)
             else
                 modifiedDelay = math.max((delay - actor:getMod(xi.mod.MARTIAL_ARTS)) / 2, 48) -- min delay of 96 total so 96/2 per fist, https://www.bg-wiki.com/ffxi/Attack_Speed
             end
-        elseif actor:getObjType() == xi.objType.MOB then
+        elseif
+            actor:getObjType() == xi.objType.MOB or
+            actor:isJugPet() -- Mandragora Jug Pets are MNKs
+        then
             modifiedDelay = math.max(delay / 2, 48) -- Mobs are not affected at all by Martial Arts.
         else
             -- TODO: handle the corner case where a PC-like entity is using h2h but is only hitting with one 'fist'. Perhaps they have a shield with no main weapon.
@@ -191,10 +196,6 @@ xi.combat.tp.calculateTPGainOnPhysicalDamage = function(actor, target, totalDama
         return 0
     end
 
-    if actor:hasStatusEffect(xi.effect.MEIKYO_SHISUI) then
-        return 0
-    end
-
     -- TODO: does dAGI penalty work against/for Trusts/Pets? Nothing is documented for this. Currently assuming mob only.
     local attackOutput       = xi.combat.tp.getModifiedDelayAndCanZanshin(actor, delay)
     local baseTPGain         = xi.combat.tp.calculateTPReturn(actor, attackOutput.modifiedDelay)
@@ -205,7 +206,7 @@ xi.combat.tp.calculateTPGainOnPhysicalDamage = function(actor, target, totalDama
     local subtleBlowI        = math.min(actor:getMod(xi.mod.SUBTLE_BLOW) + subtleBlowMerits, 50) -- cap of 50% https://www.bg-wiki.com/ffxi/Subtle_Blow
     local tandemBlowBonus    = xi.combat.tp.getTandemBlowBonus(actor)
     local subtleBlowII       = actor:getMod(xi.mod.SUBTLE_BLOW_II) + tandemBlowBonus             -- no known cap
-    local subtleBlowModifier = math.max((100 - subtleBlowI + subtleBlowII) / 100, 0.25)          -- combined cap of 75% reduction: https://www.bg-wiki.com/ffxi/Subtle_Blow
+    local subtleBlowModifier = 1 - math.max((subtleBlowI + subtleBlowII) / 100, 0.75)            -- combined cap of 75% reduction: https://www.bg-wiki.com/ffxi/Subtle_Blow
     local storeTPModifier    = 1 + target:getMod(xi.mod.STORETP) / 100
 
     -- TODO: unknown where/how many floor steps there are. Napkin math seems to be a single floor step, but given x/256 it's hard to tell
@@ -236,10 +237,6 @@ xi.combat.tp.calculateTPGainOnMagicalDamage = function(actor, target, totalDamag
         return 0
     end
 
-    if actor:hasStatusEffect(xi.effect.MEIKYO_SHISUI) then
-        return 0
-    end
-
     -- TODO: does dAGI penalty work against/for Trusts/Pets? Nothing is documented for this. Currently assuming mob only.
     local dAGI               = actor:getStat(xi.mod.AGI) - target:getStat(xi.mod.AGI)
     local inhibitTPModifier  = (100 - target:getMod(xi.mod.INHIBIT_TP)) / 100                    -- no known cap: https://www.bg-wiki.com/ffxi/Monster_TP_gain#Inhibit_TP
@@ -248,7 +245,7 @@ xi.combat.tp.calculateTPGainOnMagicalDamage = function(actor, target, totalDamag
     local subtleBlowI        = math.min(actor:getMod(xi.mod.SUBTLE_BLOW) + subtleBlowMerits, 50) -- cap of 50% https://www.bg-wiki.com/ffxi/Subtle_Blow
     local tandemBlowBonus    = xi.combat.tp.getTandemBlowBonus(actor)
     local subtleBlowII       = actor:getMod(xi.mod.SUBTLE_BLOW_II) + tandemBlowBonus             -- no known cap
-    local subtleBlowModifier = math.max((100 - subtleBlowI + subtleBlowII) / 100, 0.25)          -- combined cap of 75% reduction: https://www.bg-wiki.com/ffxi/Subtle_Blow
+    local subtleBlowModifier = 1 - math.max((subtleBlowI + subtleBlowII) / 100, 0.75)            -- combined cap of 75% reduction: https://www.bg-wiki.com/ffxi/Subtle_Blow
     local storeTPModifier    = 1 + target:getMod(xi.mod.STORETP) / 100
 
     -- Similar caveats to above for physical damage, unknown where/how many floors but seems to be one.

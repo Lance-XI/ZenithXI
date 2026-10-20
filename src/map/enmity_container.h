@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -19,8 +19,7 @@
 ===========================================================================
 */
 
-#ifndef _CENMITYCONTAINER_H
-#define _CENMITYCONTAINER_H
+#pragma once
 
 #include "common/cbasetypes.h"
 
@@ -77,5 +76,3 @@ private:
     bool         m_tameable{ true };
     CMobEntity*  m_EnmityHolder; // usually a monster
 };
-
-#endif

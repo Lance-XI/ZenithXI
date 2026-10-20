@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -25,9 +25,11 @@
 #include "entities/battle_entity.h"
 
 #include "ai/ai_container.h"
+#include "entities/char_entity.h"
 #include "packets/s2c/0x028_battle2.h"
 #include "packets/s2c/0x058_assist.h"
 #include "utils/battleutils.h"
+#include "zone.h"
 
 namespace
 {

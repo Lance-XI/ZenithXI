@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -54,6 +54,7 @@ using RegionsDataset      = xi::data::datasets::zones::regions::Dataset;
 #include "common/utils.h"
 #include "common/vana_time.h"
 
+#include <algorithm>
 #include <filesystem>
 
 #include "battlefield.h"
@@ -88,7 +89,7 @@ using RegionsDataset      = xi::data::datasets::zones::regions::Dataset;
 #include <map/ximesh/ximesh.h>
 #include <map/ximesh/ximesh_impl.h>
 
-CZone::CZone(Scheduler& scheduler, MapConfig config, xi::ZoneId ZoneID, REGION_TYPE RegionID, CONTINENT_TYPE ContinentID, uint8 levelRestriction, const std::optional<xi::data::ZoneSettings>& settings)
+CZone::CZone(Scheduler& scheduler, MapConfig config, const xi::ZoneId ZoneID, const xi::Region RegionID, const xi::Continent ContinentID, const uint8 levelRestriction, const std::optional<xi::data::ZoneSettings>& settings)
 : scheduler_(scheduler)
 , config_(config)
 , navMesh_{ std::make_unique<NullNavMesh>() }
@@ -140,37 +141,37 @@ auto CZone::GetID() const -> xi::ZoneId
     return m_zoneID;
 }
 
-xi::ZoneType CZone::GetTypeMask()
+auto CZone::GetTypeMask() const -> xi::ZoneType
 {
     return m_zoneType;
 }
 
-REGION_TYPE CZone::GetRegionID()
+auto CZone::GetRegionID() const -> xi::Region
 {
     return m_regionID;
 }
 
-CONTINENT_TYPE CZone::GetContinentID()
+auto CZone::GetContinentID() const -> xi::Continent
 {
     return m_continentID;
 }
 
-uint8 CZone::getLevelRestriction()
+auto CZone::getLevelRestriction() const -> uint8
 {
     return m_levelRestriction;
 }
 
-uint32 CZone::GetIP() const
+auto CZone::GetIP() const -> uint32
 {
     return m_zoneIP;
 }
 
-uint16 CZone::GetPort() const
+auto CZone::GetPort() const -> uint16
 {
     return m_zonePort;
 }
 
-uint16 CZone::GetTax() const
+auto CZone::GetTax() const -> uint16
 {
     return m_tax;
 }
@@ -263,7 +264,7 @@ const QueryByNameResult_t& CZone::queryEntitiesByName(const std::string& pattern
 
     // Always ignore cache for queries explicitly looking for dynamic entities
     // TODO: make this memoization work for dynamic entities somehow?
-    if (pattern.rfind("DE_", 0) != 0)
+    if (!pattern.starts_with("DE_"))
     {
         // Use memoization since lookups are typically for the same mob names
         auto result = m_queryByNameResults.find(pattern);
@@ -325,14 +326,8 @@ bool CZone::CanUseMisc(xi::ZoneMisc misc) const
 
 zoneLine_t* CZone::GetZoneLine(uint32 zoneLineID)
 {
-    for (const auto& zoneLine : m_zoneLineList)
-    {
-        if (zoneLine->zoneLineId == zoneLineID)
-        {
-            return zoneLine;
-        }
-    }
-    return nullptr;
+    const auto it = std::ranges::find(m_zoneLineList, zoneLineID, &zoneLine_t::zoneLineId);
+    return it != m_zoneLineList.end() ? *it : nullptr;
 }
 
 // Spawns players across 8 fixed slots along the target zoneline area.
@@ -783,7 +778,8 @@ void CZone::SetWeather(const xi::Weather weather)
 
     m_zoneEntities->WeatherChange(weather);
 
-    const uint32 changeTime = earth_time::vanadiel_timestamp();
+    const auto   cycleTime  = vanadiel_time::now().time_since_epoch() % xi::vanadiel_clock::days(WeatherCycle);
+    const uint32 changeTime = static_cast<uint32>(std::chrono::floor<xi::vanadiel_clock::minutes>(cycleTime).count());
     weather_.set(weather, changeTime);
 
     m_zoneEntities->PushPacket(nullptr, CHAR_INZONE, std::make_unique<GP_SERV_COMMAND_WEATHER>(changeTime, weather, xirand::GetRandomNumber(4, 28)));
@@ -1199,7 +1195,19 @@ void CZone::CharZoneIn(CCharEntity* PChar)
         auto* PBattlefield = m_BattlefieldHandler->GetBattlefield(PChar, true);
         if (PBattlefield != nullptr && PChar->StatusEffectContainer->HasStatusEffectByFlag(xi::StatusEffectFlag::Confrontation))
         {
-            PBattlefield->InsertEntity(PChar, CBattlefield::hasPlayerEntered(PChar));
+            const bool entered = CBattlefield::hasPlayerEntered(PChar);
+
+            // Retail closes the fight once its last player has logged out
+            if (entered && !PBattlefield->IsOccupied() && PBattlefield->GetStatus() < BATTLEFIELD_STATUS_WON)
+            {
+                PBattlefield->RemoveRegistration(PChar);
+                PBattlefield->CanCleanup(true);
+                m_BattlefieldHandler->addOrphanedPlayer(PChar);
+            }
+            else
+            {
+                PBattlefield->InsertEntity(PChar, entered);
+            }
         }
         else if (PChar->StatusEffectContainer->HasStatusEffectByFlag(xi::StatusEffectFlag::Confrontation))
         {
@@ -1319,14 +1327,11 @@ void CZone::CharZoneOut(CCharEntity* PChar)
             }
             if (PChar->PParty->GetSyncTarget() != nullptr)
             {
-                uint8 count = 0;
-                for (uint32 i = 0; i < PChar->PParty->members.size(); ++i)
-                {
-                    if (PChar->PParty->members.at(i) != PChar && PChar->PParty->members.at(i)->getZone() == PChar->PParty->GetSyncTarget()->getZone())
-                    {
-                        count++;
-                    }
-                }
+                const auto count = static_cast<uint8>(std::ranges::count_if(PChar->PParty->members,
+                                                                            [&](const auto* member)
+                                                                            {
+                                                                                return member != PChar && member->getZone() == PChar->PParty->GetSyncTarget()->getZone();
+                                                                            }));
                 if (count < 2) // 3, because one is zoning out - thus at least 2 will be left
                 {
                     PChar->PParty->SetSyncTarget("", MsgStd::LevelSyncRemoveTooFewMembers);

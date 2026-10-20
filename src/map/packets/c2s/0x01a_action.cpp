@@ -28,11 +28,15 @@
 #include "data/enums/key_item.h"
 #include "enmity_container.h"
 #include "entities/char_entity.h"
+#include "entities/npc_entity.h"
 #include "entities/trust_entity.h"
+#include "enums/msg_basic.h"
 #include "enums/msg_std.h"
 #include "items.h"
 #include "items/transactions/item_claim.h"
 #include "latent_effect_container.h"
+#include "lua/luautils.h"
+#include "packets/c2s/validation.h"
 #include "packets/s2c/0x01d_item_same.h"
 #include "packets/s2c/0x029_battle_message.h"
 #include "packets/s2c/0x02f_dig.h"
@@ -44,7 +48,10 @@
 #include "status_effect_container.h"
 #include "trade_container.h"
 #include "utils/battleutils.h"
+#include "utils/charutils.h"
+#include "utils/fishingutils.h"
 #include "utils/mountutils.h"
+#include "zone.h"
 
 namespace
 {
@@ -100,7 +107,7 @@ auto GP_CLI_COMMAND_ACTION::validate(MapSession* PSession, const CCharEntity* PC
                     case GP_CLI_COMMAND_ACTION_ACTIONID::Attack:
                     {
                         // Note: It is possible to attack while fishing on retail and is disabled here on purpose.
-                        pv.blockedBy({ BlockedState::InEvent, BlockedState::Healing, BlockedState::Sitting, BlockedState::Crafting, BlockedState::Fishing, BlockedState::PreventAction });
+                        pv.blockedBy({ BlockedState::InEvent, BlockedState::Healing, BlockedState::Sitting, BlockedState::Crafting, BlockedState::Fishing, BlockedState::PreventAction, BlockedState::Gestation });
                         break;
                     }
                     case GP_CLI_COMMAND_ACTION_ACTIONID::CastMagic:
@@ -109,7 +116,8 @@ auto GP_CLI_COMMAND_ACTION::validate(MapSession* PSession, const CCharEntity* PC
                     case GP_CLI_COMMAND_ACTION_ACTIONID::Weaponskill:
                     case GP_CLI_COMMAND_ACTION_ACTIONID::MonsterSkill: // MonsterSkill is entirely assumed
                     {
-                        pv.blockedBy({ BlockedState::InEvent, BlockedState::Healing, BlockedState::Crafting, BlockedState::Fishing, BlockedState::PreventAction, BlockedState::Mounted })
+                        // A Monipulator under Gestation cannot be seen, so nothing it starts may land.
+                        pv.blockedBy({ BlockedState::InEvent, BlockedState::Healing, BlockedState::Crafting, BlockedState::Fishing, BlockedState::PreventAction, BlockedState::Mounted, BlockedState::Gestation })
                             .mustEqual(PChar->animation == xi::Animation::None || PChar->animation == xi::Animation::Attack, true, "Character in invalid animation state.");
                         break;
                     }
@@ -120,7 +128,7 @@ auto GP_CLI_COMMAND_ACTION::validate(MapSession* PSession, const CCharEntity* PC
                     }
                     case GP_CLI_COMMAND_ACTION_ACTIONID::Mount:
                     {
-                        pv.blockedBy({ BlockedState::InEvent, BlockedState::Healing, BlockedState::Sitting, BlockedState::Crafting, BlockedState::Fishing });
+                        pv.blockedBy({ BlockedState::InEvent, BlockedState::Healing, BlockedState::Sitting, BlockedState::Crafting, BlockedState::Fishing, BlockedState::Monstrosity });
                         break;
                     }
                     case GP_CLI_COMMAND_ACTION_ACTIONID::Dismount:
@@ -248,18 +256,23 @@ void GP_CLI_COMMAND_ACTION::process(MapSession* PSession, CCharEntity* PChar) co
                 return;
             }
 
-            // MONs are allowed to use doors, but nothing else
-            if (PChar->m_PMonstrosity != nullptr &&
-                PNpc->look.size != 0x02 &&
-                PChar->getZone() != xi::ZoneId::Feretory &&
-                !settings::get<bool>("main.MONSTROSITY_TRIGGER_NPCS"))
+            // A Monipulator triggers nothing outside the Feretory, doors and levers included (FFXIclopedia, retail).
+            // TODO: FFXIclopedia's exceptions, such as the Castle Zvahl Keep doors and the Garlaige gates with the key item.
+            if (PChar->m_PMonstrosity != nullptr && PChar->getZone() != xi::ZoneId::Feretory)
+            {
+                PChar->pushPacket<GP_SERV_COMMAND_EVENTUCOFF>(PChar, GP_SERV_COMMAND_EVENTUCOFF_MODE::Standard);
+                return;
+            }
+
+            if (const auto* PNpcEntity = dynamic_cast<CNpcEntity*>(PNpc); PNpcEntity && PNpcEntity->contentDisabled())
             {
                 PChar->pushPacket<GP_SERV_COMMAND_EVENTUCOFF>(PChar, GP_SERV_COMMAND_EVENTUCOFF_MODE::Standard);
                 return;
             }
 
             // NOTE: Moogles inside of mog houses are the exception for not requiring Spawned or Status checks.
-            if (distance(PNpc->loc.p, PChar->loc.p) <= 6.0f && ((PNpc->PAI->IsSpawned() && PNpc->status == xi::Status::Normal) || PChar->inMogHouse()))
+            //     : Visitors get no response.
+            if (distance(PNpc->loc.p, PChar->loc.p) <= 6.0f && ((PNpc->PAI->IsSpawned() && PNpc->status == xi::Status::Normal) || PChar->inMogHouse(xi::MogHouse::Own)))
             {
                 PNpc->PAI->Trigger(PChar);
                 PChar->m_charHistory.npcInteractions++;
@@ -329,6 +342,12 @@ void GP_CLI_COMMAND_ACTION::process(MapSession* PSession, CCharEntity* PChar) co
         case GP_CLI_COMMAND_ACTION_ACTIONID::Help:
         {
             // TODO: C4H applies to ALL claimed enemies on which you (personally) have enmity. This does NOT require you to be engaged.
+            // FFXIclopedia: a Monipulator cannot call for help.
+            if (PChar->m_PMonstrosity != nullptr)
+            {
+                break;
+            }
+
             if (auto* PMob = dynamic_cast<CMobEntity*>(PChar->GetBattleTarget()))
             {
                 if (!PMob->GetCallForHelpFlag() && PMob->PEnmityContainer->HasID(PChar->id) && !PMob->m_CallForHelpBlocked)
@@ -570,6 +589,11 @@ void GP_CLI_COMMAND_ACTION::process(MapSession* PSession, CCharEntity* PChar) co
             if (PChar->animation != xi::Animation::None || PChar->StatusEffectContainer->HasPreventActionEffect())
             {
                 PChar->pushPacket<GP_SERV_COMMAND_BATTLE_MESSAGE>(PChar, PChar, 0, 0, MsgBasic::CannotPerformAction);
+            }
+            else if (charutils::hasKeyItem(PChar, xi::KeyItem::GladiatorialWritOfSummons))
+            {
+                // JP wiki: a gladiator holding the writ cannot ride.
+                PChar->pushPacket<GP_SERV_COMMAND_BATTLE_MESSAGE>(PChar, PChar, 0, 0, MsgBasic::CannotMount);
             }
             else if (!PChar->loc.zone->CanUseMisc(xi::ZoneMisc::Mount))
             {

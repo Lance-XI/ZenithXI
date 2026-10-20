@@ -24,27 +24,29 @@
 #include "data/enums/key_item.h"
 #include "entities/char_entity.h"
 #include "enums/msg_std.h"
+#include "packets/c2s/validation.h"
 #include "utils/charutils.h"
+#include "zone.h"
 
 namespace
 {
 
-const std::map<uint8, GP_CLI_COMMAND_MYROOM_IS_PARAM2> default2fStyles = {
-    { NATION_SANDORIA, GP_CLI_COMMAND_MYROOM_IS_PARAM2::SandorianStyle },
-    { NATION_BASTOK, GP_CLI_COMMAND_MYROOM_IS_PARAM2::BastokanStyle },
-    { NATION_WINDURST, GP_CLI_COMMAND_MYROOM_IS_PARAM2::WindurstianStyle },
+const std::map<xi::Nation, GP_CLI_COMMAND_MYROOM_IS_PARAM2> default2fStyles = {
+    { xi::Nation::Sandoria, GP_CLI_COMMAND_MYROOM_IS_PARAM2::SandorianStyle },
+    { xi::Nation::Bastok, GP_CLI_COMMAND_MYROOM_IS_PARAM2::BastokanStyle },
+    { xi::Nation::Windurst, GP_CLI_COMMAND_MYROOM_IS_PARAM2::WindurstianStyle },
 };
 
 const auto isRentARoom = [](const CCharEntity* PChar)
 {
     switch (PChar->profile.nation)
     {
-        case NATION_SANDORIA:
-            return PChar->loc.zone->GetRegionID() != REGION_TYPE::SANDORIA;
-        case NATION_BASTOK:
-            return PChar->loc.zone->GetRegionID() != REGION_TYPE::BASTOK;
-        case NATION_WINDURST:
-            return PChar->loc.zone->GetRegionID() != REGION_TYPE::WINDURST;
+        case xi::Nation::Sandoria:
+            return PChar->loc.zone->GetRegionID() != xi::Region::Sandoria;
+        case xi::Nation::Bastok:
+            return PChar->loc.zone->GetRegionID() != xi::Region::Bastok;
+        case xi::Nation::Windurst:
+            return PChar->loc.zone->GetRegionID() != xi::Region::Windurst;
         default:
             return true;
     }
@@ -57,6 +59,7 @@ auto GP_CLI_COMMAND_MYROOM_IS::validate(MapSession* PSession, const CCharEntity*
     return PacketValidator(PChar)
         .blockedBy({ BlockedState::InEvent })
         .mustEqual(PChar->m_moghouseID, PChar->id, "Character not in their mog house")
+        .mustEqual(this->Kind == static_cast<uint8_t>(GP_CLI_COMMAND_MYROOM_IS_KIND::Remodel) && PChar->moghouse().isOpen(), false, "Mog House is open to visitors")
         .oneOf<GP_CLI_COMMAND_MYROOM_IS_KIND>(this->Kind)
         .oneOf<GP_CLI_COMMAND_MYROOM_IS_PARAM2>(this->Param2);
 }
@@ -73,12 +76,10 @@ void GP_CLI_COMMAND_MYROOM_IS::process(MapSession* PSession, CCharEntity* PChar)
     switch (static_cast<GP_CLI_COMMAND_MYROOM_IS_KIND>(this->Kind))
     {
         case GP_CLI_COMMAND_MYROOM_IS_KIND::Open:
-            // Not implemented
-            // NOTE: If you zone or move floors while in the MH and you have someone visiting, they will be booted.
-            // NOTE: When you zone or move floors your "open MH" flag will be reset.
+            PChar->moghouse().open();
             break;
         case GP_CLI_COMMAND_MYROOM_IS_KIND::Close:
-            // Not implemented
+            PChar->moghouse().close();
             break;
         case GP_CLI_COMMAND_MYROOM_IS_KIND::Remodel:
         {

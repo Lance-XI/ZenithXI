@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -37,10 +37,17 @@
 #include <common/types/maybe.h>
 
 #include "data/enums/content.h"
+#include "data/enums/nation.h"
+#include "data/enums/region.h"
 
+#include <array>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <vector>
 
 #include "common/lua.h"
 
@@ -52,27 +59,20 @@
 
 #include "common/xi.h"
 
-#include "attack.h"
-#include "items/item_equipment.h"
 #include "spell.h"
-
-#include "lua_ability.h"
-#include "lua_action.h"
-#include "lua_attack.h"
-#include "lua_base_entity.h"
-#include "lua_battlefield.h"
-#include "lua_instance.h"
-#include "lua_item.h"
-#include "lua_mobskill.h"
-#include "lua_petskill.h"
-#include "lua_spell.h"
-#include "lua_statuseffect.h"
-#include "lua_trade_container.h"
-#include "lua_trigger_area.h"
-#include "lua_zone.h"
 
 #include "data/datasets/zones/mobs/dataset.h"
 #include "data/datasets/zones/npcs/dataset.h"
+
+class IPP;
+enum class ItemFlag : uint32;
+
+namespace xi
+{
+
+enum class Weather : uint16_t;
+
+} // namespace xi
 
 enum class SendToDBoxReturnCode : uint8
 {
@@ -125,11 +125,27 @@ struct action_t;
 struct action_target_t;
 struct action_result_t;
 
+namespace monstrosity
+{
+
+struct MonstrosityData_t;
+
+} // namespace monstrosity
+
 enum ConquestUpdate : uint8;
 enum class Emote : uint8;
 
 namespace luautils
 {
+
+struct WorldPassReply
+{
+    uint8       type{ 0 };
+    int32       leftNum{ 0 };
+    int32       leftHours{ 0 };
+    int32       price{ 0 };
+    std::string code;
+};
 
 namespace detail
 {
@@ -288,9 +304,9 @@ auto GetMobByID(uint32 mobid, const sol::object& instanceObj) -> CBaseEntity*;
 auto GetEntityByID(uint32 mobid, const sol::object& instanceObj, const sol::object& arg3) -> CBaseEntity*;
 
 void  WeekUpdateConquest(uint8 updateType);
-uint8 GetRegionOwner(uint8 type);
-uint8 GetRegionInfluence(uint8 type); // Return influence graphics
-uint8 GetNationRank(uint8 nation);
+auto  GetRegionOwner(xi::Region region) -> xi::Nation;
+auto  GetRegionInfluence(xi::Region region) -> uint8; // Return influence graphics
+auto  GetNationRank(xi::Nation nation) -> uint8;
 uint8 GetConquestBalance();
 bool  IsConquestAlliance();
 void  SetRegionalConquestOverseers(uint8 regionID); // Update NPC Conquest Guard
@@ -318,6 +334,10 @@ auto LoadLinkshellConciergeSlots(uint16 zoneId) -> sol::table;
 void SetLinkshellConciergeSlot(uint16 zoneId, uint8 slotIndex, const sol::table& data);
 void DeleteLinkshellConciergeSlot(uint16 zoneId, uint8 slotIndex);
 void DecrementLinkshellConciergeMembersGoal(uint16 zoneId, uint32 linkshellid);
+auto LoadChocoboRaceResult(uint32 raceNo) -> sol::object;
+void SaveChocoboRaceResult(const sol::table& data);
+auto GetChocoboRaceQuills(uint32 raceNo) -> sol::table;
+void AddChocoboRaceQuills(uint32 raceNo, uint8 pair, uint32 quills);
 
 uint32 JstDayOfTheYear();
 uint32 JstDayOfTheMonth();
@@ -352,6 +372,11 @@ int32 GetServerVariable(const std::string& name);
 void  SetServerVariable(const std::string& name, int32 value, const sol::object& expiry);
 int32 GetVolatileServerVariable(const std::string& varName);
 void  SetVolatileServerVariable(const std::string& varName, int32 value, const sol::object& expiry);
+auto  GetActiveWorldPass(uint32 inviterId) -> sol::object;                                           // Unexpired Gold World Pass bought by the character
+auto  IssueWorldPass(uint32 inviterId, uint32 expiry) -> uint32;                                     // Issues a Gold World Pass and returns its code, 0 on failure
+auto  GetWorldPassInvite(uint32 inviterId, uint32 inviteeId) -> sol::object;                         // The invite linking two characters, if any
+void  SetWorldPassClaims(uint32 inviteeId, uint8 inviteeClaims, uint8 inviterClaims);                // Anniversary items received by both sides of an invite
+auto  CountWorldPassInvites(uint32 inviterId) -> uint32;                                             // Invitees the character already received items with
 int32 GetCharVar(uint32 charId, const std::string& varName);                                         // Get player var directly from SQL DB
 void  SetCharVar(uint32 charId, const std::string& varName, int32 value, const sol::object& expiry); // Set player var in SQL DB using charId
 void  ClearCharVarFromAll(const std::string& varName);                                               // Deletes a specific player variable from all players
@@ -377,6 +402,7 @@ void OnTriggerAreaEnter(CCharEntity* PChar, const std::unique_ptr<ITriggerArea>&
 void OnTriggerAreaLeave(CCharEntity* PChar, const std::unique_ptr<ITriggerArea>& PTriggerArea); // when player leaves a trigger area in a zone
 
 void OnTransportEvent(CCharEntity* PChar, xi::ZoneId prevZoneId, std::string_view transport);
+void OnTransportVoyageEnd(CZone* PZone);
 void OnTimeTrigger(CNpcEntity* PNpc, uint8 triggerID);
 void OnConquestUpdate(CZone* PZone, ConquestUpdate type, uint8 influence, uint8 owner, uint8 ranking, bool isConquestAlliance); // conquest update (hourly or tally)
 
@@ -410,7 +436,7 @@ void  OnItemUnequip(CBaseEntity* PUser, CItem* PItem);
 void  CheckForGearSet(CBaseEntity* PTarget);
 
 int32 OnMagicCastingCheck(CBaseEntity* PChar, CBaseEntity* PTarget, CSpell* PSpell);
-int32 OnSpellCast(CBattleEntity* PCaster, CBattleEntity* PTarget, CSpell* PSpell);
+int32 OnSpellCast(CBattleEntity* PCaster, CBattleEntity* PTarget, CSpell* PSpell, action_t* action);
 void  OnSpellPrecast(CBattleEntity* PCaster, CSpell* PSpell);
 void  OnSpellCastStart(CBattleEntity* PCaster, CBattleEntity* PTarget, CSpell* PSpell);
 void  OnSpellInterrupted(CBattleEntity* PCaster, CSpell* PSpell);
@@ -442,6 +468,7 @@ void OnPetLevelRestriction(CBaseEntity* PMob);
 void OnPath(CBaseEntity* PEntity);
 void OnPathPoint(CBaseEntity* PEntity);
 void OnPathComplete(CBaseEntity* PEntity);
+void OnShopBuy(CCharEntity* PChar, CBaseEntity* PNpc, uint16 itemId, uint32 quantity, uint32 gil);
 
 int32 OnBattlefieldHandlerInitialize(CZone* PZone);
 void  OnBattlefieldInitialize(CBattlefield* PBattlefield); // what to do when initialising battlefield, battlefield:setLocalVar("lootId") here for any which have loot
@@ -464,10 +491,11 @@ void   OnMobSkillFinalize(CBaseEntity* PMob, CMobSkill* PMobSkill); // triggers 
 int32  OnAutomatonAbilityCheck(CBaseEntity* PChar, CAutomatonEntity* PAutomaton, CMobSkill* PMobSkill);
 int32  OnAutomatonAbility(CBaseEntity* PTarget, CBaseEntity* PMob, CMobSkill* PMobSkill, CBaseEntity* PMobMaster, action_t* action);
 
-auto GetMonstrosityLuaTable(CCharEntity* PChar) -> sol::table;
-void SetMonstrosityLuaTable(CCharEntity* PChar, sol::table data);
-void OnMonstrosityUpdate(CCharEntity* PChar);
+auto GetMonstrosityLuaTable(const monstrosity::MonstrosityData_t& data) -> sol::table;
+void SetMonstrosityLuaTable(monstrosity::MonstrosityData_t& data, sol::table table);
 void OnMonstrosityReturnToEntrance(CCharEntity* PChar);
+
+auto OnWorldPassRequest(CCharEntity* PChar, uint16 para) -> WorldPassReply;
 
 int32 OnAbilityCheck(CBaseEntity* PChar, CBaseEntity* PTarget, CAbility* PAbility, CBaseEntity** PMsgTarget);
 int32 OnPetAbility(CBaseEntity* PTarget, CBaseEntity* PMob, CMobSkill* PMobSkill, CBaseEntity* PPetMaster, action_t* action);

@@ -28,6 +28,7 @@
 #include "items.h"
 #include "items/item_linkshell.h"
 #include "linkshell.h"
+#include "packets/c2s/validation.h"
 #include "packets/char_status.h"
 #include "packets/s2c/0x01d_item_same.h"
 #include "packets/s2c/0x01f_item_list.h"
@@ -135,9 +136,9 @@ const auto equipLinkshell = [](CCharEntity* PChar, CItemLinkshell* PItemLinkshel
     // Unequip old linkshell
     if (oldLinkshell)
     {
-        auto* POldItemLinkshell = reinterpret_cast<CItemLinkshell*>(PChar->getEquip(slot));
+        auto* POldItemLinkshell = PChar->getLinkshell(slot);
 
-        if (POldItemLinkshell && POldItemLinkshell->isType(ITEM_LINKSHELL))
+        if (POldItemLinkshell)
         {
             linkshell::DelOnlineMember(PChar, POldItemLinkshell);
 
@@ -211,13 +212,13 @@ void GP_CLI_COMMAND_GROUP_COMLINK_ACTIVE::process(MapSession* PSession, CCharEnt
     {
         case GP_CLI_COMMAND_GROUP_COMLINK_ACTIVE_ACTIVEFLG::EquipOrCreate:
         {
+            if (PItemLinkshell->isBusy())
+            {
+                return;
+            }
+
             if (PItemLinkshell->getID() == ITEMID::NEW_LINKSHELL)
             {
-                if (PItemLinkshell->isBusy())
-                {
-                    return;
-                }
-
                 // Case 1. New Linkshell, create it.
                 createLinkshell(PChar, PItemLinkshell, *this);
             }
@@ -230,6 +231,11 @@ void GP_CLI_COMMAND_GROUP_COMLINK_ACTIVE::process(MapSession* PSession, CCharEnt
         break;
         case GP_CLI_COMMAND_GROUP_COMLINK_ACTIVE_ACTIVEFLG::Unequip:
         {
+            if (PChar->getLinkshell(static_cast<SLOTTYPE>(SLOT_BACK + this->LinkshellId)) != PItemLinkshell)
+            {
+                return;
+            }
+
             unequipLinkshell(PChar, PItemLinkshell, *this);
         }
         break;

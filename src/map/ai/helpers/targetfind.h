@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -19,8 +19,7 @@
 ===========================================================================
 */
 
-#ifndef _TARGETFIND_H
-#define _TARGETFIND_H
+#pragma once
 
 #include "common/cbasetypes.h"
 #include "common/mmo.h"
@@ -151,5 +150,3 @@ protected:
     // For self-centered AoEs (radiusType == AOE_RADIUS::ATTACKER)
     bool m_selfCenteredAoE;
 };
-
-#endif

@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2021 LandSandBoat Dev Teams
@@ -19,16 +19,21 @@
 ===========================================================================
 */
 
-#ifndef _MODULEUTILS_H
-#define _MODULEUTILS_H
+#pragma once
 
 #include "lua/luautils.h"
 
+#include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Forward declare
+class CBasicPacket;
+class CCharEntity;
 class CPPModule;
+class IPP;
+struct MapSession;
 
 namespace moduleutils
 {
@@ -115,9 +120,6 @@ void CleanupLuaModules();
 void ClearLuaModuleRegistries();
 void TryApplyLuaModules(const std::vector<std::string>& parts, bool isReload = false);
 void TryApplyRemainingLuaModules();
-auto GetDataModules(const std::string_view name, const std::string_view extension) -> std::vector<std::string>;
 void ReportLuaModuleUsage();
 
 }; // namespace moduleutils
-
-#endif // _MODULEUTILS_H

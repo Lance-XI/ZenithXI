@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -30,9 +30,11 @@
 #include "common/utils.h"
 #include "enmity_container.h"
 #include "enums/automaton.h"
+#include "lua/luautils.h"
 #include "recast_container.h"
 #include "status_effect_container.h"
 #include "utils/battleutils.h"
+#include "utils/charutils.h"
 #include "utils/mobutils.h"
 #include "utils/puppetutils.h"
 
@@ -66,14 +68,7 @@ uint8 CAutomatonEntity::attachment(const uint8 slotid) const
 
 auto CAutomatonEntity::hasAttachment(const uint8 attachment) const -> bool
 {
-    for (auto&& attachmentid : equip_.attachments)
-    {
-        if (attachmentid == attachment)
-        {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::contains(equip_.attachments, attachment);
 }
 
 void CAutomatonEntity::setEquip(const AutomatonEquip& equip)
@@ -147,9 +142,9 @@ void CAutomatonEntity::PostTick()
     CPetEntity::PostTick();
     if (pre_mask && status != xi::Status::Disappear)
     {
-        if (PMaster && PMaster->objtype == TYPE_PC)
+        if (auto* PChar = dynamic_cast<CCharEntity*>(PMaster))
         {
-            charutils::SendExtendedJobPackets(static_cast<CCharEntity*>(PMaster));
+            charutils::SendExtendedJobPackets(PChar);
         }
     }
 }
@@ -189,7 +184,7 @@ void CAutomatonEntity::OnCastFinished(CMagicState& state, action_t& action)
         {
             auto* PMob    = static_cast<CMobEntity*>(PTarget);
             auto* PMaster = dynamic_cast<CBattleEntity*>(this->PMaster);
-            if (PMaster && PMaster->objtype == TYPE_PC)
+            if (PMaster && dynamic_cast<const CCharEntity*>(PMaster) != nullptr)
             {
                 PMob->PEnmityContainer->AddBaseEnmity(PMaster);
             }
@@ -208,7 +203,7 @@ void CAutomatonEntity::OnMobSkillFinished(CMobSkillState& state, action_t& actio
     {
         auto* PMob    = static_cast<CMobEntity*>(PTarget);
         auto* PMaster = dynamic_cast<CBattleEntity*>(this->PMaster);
-        if (PMaster && PMaster->objtype == TYPE_PC)
+        if (PMaster && dynamic_cast<const CCharEntity*>(PMaster) != nullptr)
         {
             PMob->PEnmityContainer->AddBaseEnmity(PMaster);
         }

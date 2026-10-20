@@ -182,76 +182,76 @@ uint16 GetBaseWeaponDamage(CMobEntity* PMob, uint16 slot)
     uint16 damage       = mobLvl;
 
     // Zones from base game/expansions have different base offsets, multipliers, etc.
-    REGION_TYPE regionID = PMob->loc.zone->GetRegionID();
+    xi::Region regionID = PMob->loc.zone->GetRegionID();
 
     switch (regionID)
     {
         // Vanilla, ROTZ, COP Regions
-        case REGION_TYPE::RONFAURE:
-        case REGION_TYPE::ZULKHEIM:
-        case REGION_TYPE::NORVALLEN:
-        case REGION_TYPE::GUSTABERG:
-        case REGION_TYPE::DERFLAND:
-        case REGION_TYPE::SARUTABARUTA:
-        case REGION_TYPE::KOLSHUSHU:
-        case REGION_TYPE::ARAGONEU:
-        case REGION_TYPE::FAUREGANDI:
-        case REGION_TYPE::VALDEAUNIA:
-        case REGION_TYPE::QUFIMISLAND:
-        case REGION_TYPE::LITELOR:
-        case REGION_TYPE::KUZOTZ:
-        case REGION_TYPE::VOLLBOW:
-        case REGION_TYPE::ELSHIMO_LOWLANDS:
-        case REGION_TYPE::ELSHIMO_UPLANDS:
-        case REGION_TYPE::TULIA:
-        case REGION_TYPE::MOVALPOLOS:
-        case REGION_TYPE::TAVNAZIA:
-        case REGION_TYPE::SANDORIA:
-        case REGION_TYPE::BASTOK:
-        case REGION_TYPE::WINDURST:
-        case REGION_TYPE::JEUNO:
-        case REGION_TYPE::DYNAMIS:
-        case REGION_TYPE::TAVNAZIAN_MARQ:
-        case REGION_TYPE::PROMYVION:
-        case REGION_TYPE::LUMORIA:
-        case REGION_TYPE::LIMBUS:
+        case xi::Region::Ronfaure:
+        case xi::Region::Zulkheim:
+        case xi::Region::Norvallen:
+        case xi::Region::Gustaberg:
+        case xi::Region::Derfland:
+        case xi::Region::Sarutabaruta:
+        case xi::Region::Kolshushu:
+        case xi::Region::Aragoneu:
+        case xi::Region::Fauregandi:
+        case xi::Region::Valdeaunia:
+        case xi::Region::QufimIsland:
+        case xi::Region::Litelor:
+        case xi::Region::Kuzotz:
+        case xi::Region::Vollbow:
+        case xi::Region::ElshimoLowlands:
+        case xi::Region::ElshimoUplands:
+        case xi::Region::Tulia:
+        case xi::Region::Movalpolos:
+        case xi::Region::TavnazianArchipelago:
+        case xi::Region::Sandoria:
+        case xi::Region::Bastok:
+        case xi::Region::Windurst:
+        case xi::Region::Jeuno:
+        case xi::Region::Dynamis:
+        case xi::Region::TavnazianMarquisate:
+        case xi::Region::Promyvion:
+        case xi::Region::Lumoria:
+        case xi::Region::Limbus:
             offset       = 2;
-            rangedOffset = 5;
+            rangedOffset = 4;
             break;
         // TOAU Regions
-        case REGION_TYPE::WEST_AHT_URHGAN:
-        case REGION_TYPE::MAMOOL_JA_SAVAGE:
-        case REGION_TYPE::HALVUNG:
-        case REGION_TYPE::ARRAPAGO:
-        case REGION_TYPE::ALZADAAL:
+        case xi::Region::WestAhtUrhgan:
+        case xi::Region::MamoolJaSavage:
+        case xi::Region::Halvung:
+        case xi::Region::Arrapago:
+        case xi::Region::Alzadaal:
             offset       = 10;
             rangedOffset = 12;
             break;
 
         // WOTG Regions
-        case REGION_TYPE::RONFAURE_FRONT:
-        case REGION_TYPE::NORVALLEN_FRONT:
-        case REGION_TYPE::GUSTABERG_FRONT:
-        case REGION_TYPE::DERFLAND_FRONT:
-        case REGION_TYPE::SARUTA_FRONT:
-        case REGION_TYPE::ARAGONEAU_FRONT:
-        case REGION_TYPE::FAUREGANDI_FRONT:
-        case REGION_TYPE::VALDEAUNIA_FRONT:
+        case xi::Region::RonfaureFront:
+        case xi::Region::NorvallenFront:
+        case xi::Region::GustabergFront:
+        case xi::Region::DerflandFront:
+        case xi::Region::SarutabarutaFront:
+        case xi::Region::AragoneuFront:
+        case xi::Region::FauregandiFront:
+        case xi::Region::ValdeauniaFront:
             offset       = 11;
             rangedOffset = 13;
             break;
 
         // Other
-        case REGION_TYPE::ABYSSEA:
-        case REGION_TYPE::THE_THRESHOLD:
-        case REGION_TYPE::ABDHALJS: // TODO: Need data for ABDHALJS zones.
+        case xi::Region::Abyssea:
+        case xi::Region::TheThreshold:
+        case xi::Region::Abdhaljs: // TODO: Need data for ABDHALJS zones.
             offset       = 11;
             rangedOffset = 13;
             break;
 
         // SOA Regions
-        case REGION_TYPE::ADOULIN_ISLANDS:
-        case REGION_TYPE::EAST_ULBUKA:
+        case xi::Region::AdoulinIslands:
+        case xi::Region::EastUlbuka:
             offset       = 11; // TODO: Need more data for Lvl 100+ mobs.
             rangedOffset = 13;
             break;
@@ -272,15 +272,9 @@ uint16 GetBaseWeaponDamage(CMobEntity* PMob, uint16 slot)
     }
 
     // Clamp to 0 for edge cases that might cause the offset go negative.
-    if (offset < 0)
-    {
-        offset = 0;
-    }
+    offset = std::max<int8>(offset, 0);
 
-    if (rangedOffset < 0)
-    {
-        rangedOffset = 0;
-    }
+    rangedOffset = std::max<int8>(rangedOffset, 0);
 
     // Set default offsets. Will be calculated in battlentity::GetMainWeaponDmg()
     PMob->setMobMod(xi::MobMod::DamageOffset, offset);
@@ -724,6 +718,22 @@ static uint32 CalculateBaseMobHP(uint8 mLvl, uint8 baseHP, uint8 jobScale, uint8
 
 /************************************************************************
  *                                                                       *
+ *  Subjob HP at a given subjob level                                    *
+ *                                                                       *
+ ************************************************************************/
+static auto SubjobHPAtLevel(const int32 sjLvl, const uint8 sjJobScale, const uint8 sjScaleXHP) -> uint32
+{
+    const auto sjHP = sjJobScale * std::max(sjLvl - 1, 0) +
+                      (0.5 + 0.5 * sjScaleXHP) * std::max(sjLvl - 10, 0) +
+                      std::max(sjLvl - 30, 0) +
+                      std::max(sjLvl - 50, 0) +
+                      std::max(sjLvl - 70, 0);
+
+    return static_cast<uint32>(std::ceil(sjHP / 2.0));
+}
+
+/************************************************************************
+ *                                                                       *
  *  Calculate subjob HP contribution                                     *
  *                                                                       *
  ************************************************************************/
@@ -753,14 +763,24 @@ static uint32 CalculateSubjobHP(uint8 mLvl, uint8 sjJobScale, uint8 sjScaleXHP)
         sjScale = mLvl / 4;
     }
 
-    const double sjHp =
-        sjJobScale * std::max(sjScale - 1, 0) +
-        (0.5 + 0.5 * sjScaleXHP) * std::max(sjScale - 10, 0) +
-        std::max(sjScale - 30, 0) +
-        std::max(sjScale - 50, 0) +
-        std::max(sjScale - 70, 0);
+    return SubjobHPAtLevel(sjScale, sjJobScale, sjScaleXHP);
+}
 
-    return static_cast<uint32>(std::ceil(sjHp / 2.0));
+/************************************************************************
+ *                                                                       *
+ *  Monipulator HP before merits and its multiplier: the mob main job    *
+ *  term, and the sub job term at the full main level.                   *
+ *                                                                       *
+ ************************************************************************/
+auto MonipulatorBaseHP(const xi::Job mjob, const xi::Job sjob, const uint8 level) -> uint32
+{
+    const auto mJobGrade = grade::GetJobGrade(mjob, 0);
+    const auto sJobGrade = grade::GetJobGrade(sjob, 0);
+    // Retail Spriggans weight the level 1 base two to one between the main and sub job.
+    const auto baseHP = static_cast<uint8>((2 * grade::GetMobHPScale(mJobGrade, 0) + grade::GetMobHPScale(sJobGrade, 0)) / 3);
+    const auto mainHP = CalculateBaseMobHP(level, baseHP, grade::GetMobHPScale(mJobGrade, 1), grade::GetMobHPScale(mJobGrade, 2));
+
+    return mainHP + SubjobHPAtLevel(level, grade::GetMobHPScale(sJobGrade, 1), grade::GetMobHPScale(sJobGrade, 2));
 }
 
 /************************************************************************
@@ -770,15 +790,15 @@ static uint32 CalculateSubjobHP(uint8 mLvl, uint8 sjJobScale, uint8 sjScaleXHP)
  ************************************************************************/
 void CalculateMobStats(CMobEntity* PMob, bool recover)
 {
-    // Reset modifiers to base values to prevent stacking
-    PMob->restoreModifiers();
-    PMob->restoreMobModifiers();
-
     if (recover)
     {
         // Clear status effects only when fully recovering
         PMob->StatusEffectContainer->KillAllStatusEffect();
     }
+
+    // Reset modifiers to base values to prevent stacking
+    PMob->restoreModifiers();
+    PMob->restoreMobModifiers();
 
     bool         isNM     = (PMob->m_Type & xi::MobType::Notorious) != xi::MobType::Normal;
     xi::Job      mJob     = PMob->GetMJob();
@@ -1012,7 +1032,7 @@ void CalculateMobStats(CMobEntity* PMob, bool recover)
     // cap all stats for mLvl / job
     for (int i = static_cast<int>(xi::SkillType::DivineMagic); i <= static_cast<int>(xi::SkillType::BlueMagic); i++)
     {
-        uint16 maxSkill = battleutils::GetMaxSkill((xi::SkillType)i, PMob->GetMJob(), mLvl > 99 ? 99 : mLvl);
+        uint16 maxSkill = battleutils::GetMaxSkill((xi::SkillType)i, PMob->GetMJob(), std::min<uint8>(mLvl, 99));
         if (maxSkill != 0)
         {
             PMob->WorkingSkills.skill[i] = maxSkill;
@@ -1020,7 +1040,7 @@ void CalculateMobStats(CMobEntity* PMob, bool recover)
         else // if the mob is WAR/BLM and can cast spell
         {
             // set skill as high as main level, so their spells won't get resisted
-            uint16 maxSubSkill = battleutils::GetMaxSkill((xi::SkillType)i, PMob->GetSJob(), mLvl > 99 ? 99 : mLvl);
+            uint16 maxSubSkill = battleutils::GetMaxSkill((xi::SkillType)i, PMob->GetSJob(), std::min<uint8>(mLvl, 99));
 
             if (maxSubSkill != 0)
             {
@@ -1030,7 +1050,7 @@ void CalculateMobStats(CMobEntity* PMob, bool recover)
     }
     for (int i = static_cast<int>(xi::SkillType::HandToHand); i <= static_cast<int>(xi::SkillType::Staff); i++)
     {
-        uint16 maxSkill = battleutils::GetMaxSkill(3, mLvl > 99 ? 99 : mLvl);
+        uint16 maxSkill = battleutils::GetMaxSkill(3, std::min<uint8>(mLvl, 99));
         if (maxSkill != 0)
         {
             PMob->WorkingSkills.skill[i] = maxSkill;
@@ -1082,7 +1102,18 @@ void CalculateMobStats(CMobEntity* PMob, bool recover)
     // If a mob is going to dual wield, then it needs to have a sub slot.
     // Assume it is the same damage as the main slot.
     // Ordering matters. This has to come after SetupJob
-    static_cast<CItemWeapon*>(PMob->m_Weapons[SLOT_SUB])->setDamage(PMob->IsDualWielding() ? GetBaseWeaponDamage(PMob, SLOT_MAIN) : 0);
+    // TODO: hook up modmod/ecosystem/something to set damage. fomors/hydras probably aren't all blunt.
+    if (PMob->IsDualWielding())
+    {
+        static_cast<CItemWeapon*>(PMob->m_Weapons[SLOT_SUB])->setDamage(GetBaseWeaponDamage(PMob, SLOT_MAIN));
+
+        static_cast<CItemWeapon*>(PMob->m_Weapons[SLOT_MAIN])->setDmgType(xi::DamageType::Slashing); // Assume Fomor/Hydra NIN are slashing
+        static_cast<CItemWeapon*>(PMob->m_Weapons[SLOT_SUB])->setDmgType(xi::DamageType::Slashing);
+    }
+    else
+    {
+        static_cast<CItemWeapon*>(PMob->m_Weapons[SLOT_MAIN])->setDmgType(xi::DamageType::Blunt);
+    }
 
     SetupRoaming(PMob);
 

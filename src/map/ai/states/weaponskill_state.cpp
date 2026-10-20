@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -26,6 +26,8 @@
 #include "action/action.h"
 #include "ai/ai_container.h"
 #include "entities/battle_entity.h"
+#include "entities/char_entity.h"
+#include "enums/msg_basic.h"
 #include "packets/s2c/0x028_battle2.h"
 #include "packets/s2c/0x029_battle_message.h"
 #include "roe.h"
@@ -175,9 +177,9 @@ auto CWeaponSkillState::Update(const timer::time_point tick) -> bool
                     }
                 }
 
-                if (m_PEntity->objtype == TYPE_PC)
+                if (auto* PChar = dynamic_cast<CCharEntity*>(m_PEntity))
                 {
-                    roeutils::event(ROE_EVENT::ROE_WSKILL_USE, static_cast<CCharEntity*>(m_PEntity), RoeDatagram("skillType", m_PSkill->getType()));
+                    roeutils::event(ROE_EVENT::ROE_WSKILL_USE, PChar, RoeDatagram("skillType", m_PSkill->getType()));
                 }
             }
         }
@@ -192,9 +194,8 @@ auto CWeaponSkillState::Update(const timer::time_point tick) -> bool
     }
     else if (tick > m_finishTime)
     {
-        if (m_PEntity->objtype == TYPE_PC)
+        if (auto* PChar = dynamic_cast<CCharEntity*>(m_PEntity))
         {
-            CCharEntity* PChar = static_cast<CCharEntity*>(m_PEntity);
             PChar->m_charHistory.wsUsed++;
         }
         return true;

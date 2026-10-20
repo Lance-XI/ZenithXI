@@ -22,12 +22,14 @@
 #include "0x10b_bazaar_close.h"
 
 #include "entities/char_entity.h"
+#include "packets/c2s/validation.h"
 #include "packets/s2c/0x107_bazaar_close.h"
 
 auto GP_CLI_COMMAND_BAZAAR_CLOSE::validate(MapSession* PSession, const CCharEntity* PChar) const -> PacketValidationResult
 {
+    // FFXIclopedia: a Monipulator cannot set up a bazaar.
     return PacketValidator(PChar)
-        .blockedBy({ BlockedState::InEvent })
+        .blockedBy({ BlockedState::InEvent, BlockedState::Monstrosity })
         .mustEqual(this->AllListClearFlg, 0, "AllListClearFlg not 0"); // Always 0
 }
 

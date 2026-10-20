@@ -57,8 +57,9 @@ end
 ---@param p3 integer?
 ---@param chat integer?
 ---@param sender CBaseEntity? Speaker for private messages, separate from the named entity.
+---@param showSender boolean? Print the speaker's name, defaults to true when a sender is given.
 ---@return nil
-function CBaseEntity:messageName(messageID, entity, p0, p1, p2, p3, chat, sender)
+function CBaseEntity:messageName(messageID, entity, p0, p1, p2, p3, chat, sender, showSender)
 end
 
 ---@param messageID integer
@@ -750,13 +751,30 @@ function CBaseEntity:getCurrentRegion()
 end
 
 ---@nodiscard
----@return integer
+---@return xi.continent
 function CBaseEntity:getContinentID()
 end
 
 ---@nodiscard
+---@param kind xi.mogHouse?
 ---@return boolean
-function CBaseEntity:inMogHouse()
+function CBaseEntity:inMogHouse(kind)
+end
+
+---@param hostId integer
+---@param npc CBaseEntity
+---@return boolean
+function CBaseEntity:visitMogHouse(hostId, npc)
+end
+
+---@nodiscard
+---@return CBaseEntity?
+function CBaseEntity:getMogHouseOwner()
+end
+
+---@nodiscard
+---@return CBaseEntity[]
+function CBaseEntity:getMogHouseVisitors()
 end
 
 ---@param triggerAreaId integer
@@ -1114,12 +1132,13 @@ function CBaseEntity:sendLinkshellConcierge(data)
 end
 
 ---@class ChocoboRaceStats
----@field str xi.chocoboRaising.statRank?
----@field ["end"] xi.chocoboRaising.statRank?
----@field dsc xi.chocoboRaising.statRank?
----@field rcp xi.chocoboRaising.statRank?
+---@field str integer? Raw stat 0-255
+---@field ["end"] integer? Raw stat 0-255
+---@field dsc integer? Raw stat 0-255
+---@field rcp integer? Raw stat 0-255
 
 ---@class ChocoboRaceEntry
+---@field name string?
 ---@field item xi.chocoboRacing.sectionEvent?
 ---@field orders xi.chocoboRacing.order?
 ---@field size xi.chocoboRacing.jockeySize?
@@ -1135,7 +1154,7 @@ end
 ---@field type xi.chocoboRacing.sectionEvent?
 ---@field user integer? Bitmask: the acting chocobo
 ---@field targets integer? Bitmask: affected chocobos
----@field param integer? Bitmask: extra affected / type param
+---@field param integer? Bitmask: chocobos that avoided it
 
 ---@class ChocoboRaceSection
 ---@field from integer[] Per-chocobo positions at section start
@@ -1412,11 +1431,11 @@ function CBaseEntity:setCallForHelpBlocked(blocked)
 end
 
 ---@nodiscard
----@return integer
+---@return xi.nation
 function CBaseEntity:getNation()
 end
 
----@param nation integer
+---@param nation xi.nation
 ---@return nil
 function CBaseEntity:setNation(nation)
 end
@@ -1655,6 +1674,11 @@ end
 function CBaseEntity:setBelligerencyFlag(flag)
 end
 
+---@param speciesCode integer
+---@return nil
+function CBaseEntity:changeMonstrositySpecies(speciesCode)
+end
+
 ---@nodiscard
 ---@return integer
 function CBaseEntity:getMonstrositySize()
@@ -1669,6 +1693,23 @@ end
 ---@param sjob integer
 ---@return nil
 function CBaseEntity:setMonstrosityEntryData(x, y, z, rot, zoneId, mjob, sjob)
+end
+
+---@nodiscard
+---@return table<integer, table<integer, { monSpecies: xi.monstrositySpecies?, monVariant: xi.monstrosityVariant?, infamyCost: integer, requirements: { [1]: xi.monstrositySpecies, [2]: integer }[] }>>
+function CBaseEntity:getMonstrosityShop()
+end
+
+---@nodiscard
+---@param zoneId xi.zone
+---@return { [1]: number, [2]: number, [3]: number, [4]: integer }[]
+function CBaseEntity:getMonstrosityExits(zoneId)
+end
+
+---@nodiscard
+---@param zoneId xi.zone
+---@return boolean
+function CBaseEntity:isMonstrosityPassageZone(zoneId)
 end
 
 ---@nodiscard
@@ -1722,7 +1763,7 @@ function CBaseEntity:getFameLevel(area)
 end
 
 ---@nodiscard
----@param nation integer
+---@param nation xi.nation
 ---@return integer
 function CBaseEntity:getRank(nation)
 end

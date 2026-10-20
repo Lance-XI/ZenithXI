@@ -26,6 +26,7 @@
 #include "map/entities/base_entity.h"
 #include "map/entities/char_entity.h"
 #include "test_common.h"
+#include "zone.h"
 
 #include <array>
 #include <format>
@@ -169,7 +170,7 @@ auto TestChar::create(const xi::ZoneId zoneId, const CharRace race) -> std::uniq
         .m_name   = {},
         .m_mjob   = static_cast<uint8>(xi::Job::WAR),
         .m_zone   = zoneId,
-        .m_nation = NATION_SANDORIA,
+        .m_nation = xi::Nation::Sandoria,
     };
 
     mini.m_look.race = static_cast<uint8>(race);
@@ -196,9 +197,13 @@ TestChar::~TestChar()
 
 void TestChar::clearPackets() const
 {
+    // drain without clearPacketList, which also resets the spawn lists
     if (session_)
     {
-        session_->PChar->clearPacketList();
+        while (!session_->PChar->isPacketListEmpty())
+        {
+            std::ignore = session_->PChar->popPacket();
+        }
     }
 }
 

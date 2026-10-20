@@ -25,7 +25,6 @@ return {
     ['Exoroche']             = { event =  76 },
     ['Femitte']              = { event = 661 },
     ['Foletta']              = { event = 666 },
-    ['Fulchia']              = { event = 587 },
     ['Gizel']                = { event = 676 },
     ['Guilboire']            = { event = 657 },
     ['Hae_Jakhya']           = { event = 610 },
@@ -38,6 +37,7 @@ return {
     ['Maugie']               = { event =  46 },
     ['Melledanne']           = { event = 943 },
     ['Norejaie']             = { event = 678 },
+    ['Palabelle']            = { event = 876, options = { [2] = 1 } },
     ['Paouala']              = { event =  82 },
     ['Phillone']             = { event =  29 },
     ['qm2']                  = { messageSpecial = ID.text.NOTHING_OUT_OF_ORDINARY },
@@ -49,5 +49,5 @@ return {
     ['Taumila']              = { text = ID.text.TAUMILA_DIALOG },
     ['Valderotaux']          = { event = 58 },
     ['Varchet']              = { event = 525 },
-    ['Well']                 = { text = ID.text.YOU_FIND_A_WELL },
+    ['Well']                 = { messageSpecial = ID.text.YOU_FIND_A_WELL },
 }

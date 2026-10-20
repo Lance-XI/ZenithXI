@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -24,10 +24,12 @@
 #include "ai/ai_container.h"
 #include "ai/states/magic_state.h"
 #include "common/utils.h"
+#include "entities/char_entity.h"
 #include "entities/pet_entity.h"
 #include "mob_spell_container.h"
 #include "status_effect_container.h"
 #include "utils/petutils.h"
+#include "zone.h"
 
 namespace
 {
@@ -66,7 +68,7 @@ auto CPetController::DoRoamTick(timer::time_point tick) -> Task<void>
     }
 
     const auto isPet        = PPet->objtype == TYPE_PET;
-    const auto isCharmedMob = PPet->objtype == TYPE_MOB && PPet->PMaster && PPet->PMaster->objtype == TYPE_PC;
+    const auto isCharmedMob = PPet->objtype == TYPE_MOB && PPet->PMaster && dynamic_cast<const CCharEntity*>(PPet->PMaster) != nullptr;
 
     if (isPet || isCharmedMob)
     {
@@ -177,7 +179,7 @@ auto CPetController::Tick(const timer::time_point tick) -> Task<void>
     TracyZoneScopedN("CPetController::Tick");
     TracyZoneString(PPet->getName());
 
-    bool isPlayerPet = PPet->objtype == TYPE_PET || (PPet->objtype == TYPE_MOB && PPet->PMaster && PPet->PMaster->objtype == TYPE_PC);
+    bool isPlayerPet = PPet->objtype == TYPE_PET || (PPet->objtype == TYPE_MOB && PPet->PMaster && dynamic_cast<const CCharEntity*>(PPet->PMaster) != nullptr);
 
     // if a player pet then check if a charmed mob or jug pet and if it should despawn
     if (isPlayerPet)

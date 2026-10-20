@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -28,7 +28,7 @@
 #include "utils/charutils.h"
 #include "utils/zoneutils.h"
 
-CZoneInstance::CZoneInstance(Scheduler& scheduler, MapConfig config, xi::ZoneId ZoneID, REGION_TYPE RegionID, CONTINENT_TYPE ContinentID, uint8 levelRestriction, const std::optional<xi::data::ZoneSettings>& settings)
+CZoneInstance::CZoneInstance(Scheduler& scheduler, MapConfig config, const xi::ZoneId ZoneID, const xi::Region RegionID, const xi::Continent ContinentID, const uint8 levelRestriction, const std::optional<xi::data::ZoneSettings>& settings)
 : CZone(scheduler, config, ZoneID, RegionID, ContinentID, levelRestriction, settings)
 {
     TracyZoneScoped;
@@ -426,9 +426,8 @@ auto CZoneInstance::ZoneServer(timer::time_point tick) -> Task<void>
         instancesByRun_.erase(PInstance->runId());
 
         m_InstanceList.erase(
-            std::find_if(
-                m_InstanceList.begin(),
-                m_InstanceList.end(),
+            std::ranges::find_if(
+                m_InstanceList,
                 [&PInstance](const auto& el)
                 {
                     return el.get() == PInstance;

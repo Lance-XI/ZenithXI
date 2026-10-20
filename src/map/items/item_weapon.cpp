@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 
   Copyright (c) 2010-2015 Darkstar Dev Teams
@@ -22,6 +22,7 @@
 #include "item_weapon.h"
 
 #include "entities/battle_entity.h"
+#include "items/exdata.h"
 #include "utils/battleutils.h"
 #include "utils/charutils.h"
 #include "utils/itemutils.h"
