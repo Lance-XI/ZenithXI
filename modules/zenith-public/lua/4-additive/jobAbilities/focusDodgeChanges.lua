@@ -44,7 +44,7 @@ m:addOverride('xi.effects.dodge.onEffectGain', function(target, effect)
     local jpModBonus = effect:getPower()
 
     effect:addMod(xi.mod.EVA, baseEva + jpModBonus)
-    effect:addMod(xi.mod.GUARD, baseGuard)
+    effect:addMod(xi.mod.ADDITIVE_GUARD, baseGuard)
 
     if isFreshEffect(target) then
         effect:setDuration(duration)

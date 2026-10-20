@@ -38,6 +38,17 @@ describe('Zenith ability adjustments', function()
         { name = 'Overdrive',      effect = xi.effect.OVERDRIVE,      job = xi.job.PUP, give = { duration = 180 },           expect = { duration = 60000 } },
     }
 
+    it('gives Dodge guard activation rate, not guard skill', function()
+        local player = xi.test.world:spawnPlayer({ zone = xi.zone.WEST_RONFAURE, job = xi.job.MNK, level = 99 })
+        local guardRate  = player:getMod(xi.mod.ADDITIVE_GUARD)
+        local guardSkill = player:getMod(xi.mod.GUARD)
+
+        player:addStatusEffect(xi.effect.DODGE, { power = 0, duration = 30, origin = player })
+
+        assert(player:getMod(xi.mod.ADDITIVE_GUARD) > guardRate, 'Dodge did not raise the guard activation rate')
+        assert(player:getMod(xi.mod.GUARD) == guardSkill, 'Dodge raised guard skill')
+    end)
+
     for _, case in ipairs(cases) do
         it(string.format('adjusts %s', case.name), function()
             local player = xi.test.world:spawnPlayer({ zone = xi.zone.WEST_RONFAURE, job = case.job, level = 99 })
