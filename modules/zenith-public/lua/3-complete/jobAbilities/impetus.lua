@@ -6,7 +6,8 @@ local m = Module:new('c-j_impetus')
 --   attack           +1 per stack instead of +2   (max +50)
 --   critical rate    +1% every second stack instead of every stack (max +25%)
 -- The augment bonuses (Bhikku/Tantra body: accuracy and critical damage) are unchanged.
--- onEffectLose is base's, which removes both listeners.
+-- super runs first so the duration change in 2-base/abilities.lua still applies; base's hit and
+-- miss listeners it adds are then replaced. onEffectLose is base's, which removes both listeners.
 -- A miss takes the bonus back with negative addMod calls: status effects have no delMod binding,
 -- so base's miss listener errors and never resets the bonus.
 -----------------------------------
@@ -18,6 +19,11 @@ local critForStacks = function(stacks)
 end
 
 m:addOverride('xi.effects.impetus.onEffectGain', function(target, effect)
+    super(target, effect)
+
+    target:removeListener('IMPETUS_HIT')
+    target:removeListener('IMPETUS_MISS')
+
     target:addListener('MELEE_SWING_HIT', 'IMPETUS_HIT', function(actorArg, targetArg, attack)
         local effectArg = actorArg:getStatusEffect(xi.effect.IMPETUS)
         if not effectArg then

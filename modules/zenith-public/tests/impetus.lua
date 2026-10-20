@@ -13,6 +13,8 @@ describe('Zenith Impetus', function()
         player.actions:useAbility(player, xi.jobAbility.IMPETUS)
         xi.test.world:tick()
         assert(player:hasStatusEffect(xi.effect.IMPETUS), 'Impetus was not applied')
+        -- 2-base/abilities.lua shortens it to 120 seconds
+        assert(player:getStatusEffect(xi.effect.IMPETUS):getDuration() == 120000, 'Impetus lost the 120 second duration from abilities.lua')
 
         for _ = 1, 3 do
             player:triggerListener('MELEE_SWING_HIT', player, mob, nil)
