@@ -32,6 +32,40 @@ describe('Zenith action queuing', function()
             assert(player:hasStatusEffect(xi.effect.BLINK), 'the spell queued during the animation was not cast')
         end)
 
+        it('drops a queued spell that could not fire within 4 seconds', function()
+            player.actions:useSpell(player, xi.magic.spell.PROTECT)
+            xi.test.world:tickEntity(player)
+            xi.test.world:skipTime(1)
+            assert(player:hasStatusEffect(xi.effect.PROTECT), 'precondition: Protect should have landed')
+
+            player.actions:useSpell(player, xi.magic.spell.BLINK)
+            xi.test.world:skipTime(5) -- first tick after queuing is past the 4s timeout
+            xi.test.world:skipTime(8)
+
+            assert(not player:hasStatusEffect(xi.effect.BLINK), 'a stale queued spell was cast')
+        end)
+
+        it('drops a queued spell when the player dies', function()
+            player.actions:useSpell(player, xi.magic.spell.PROTECT)
+            xi.test.world:tickEntity(player)
+            xi.test.world:skipTime(1)
+            assert(player:hasStatusEffect(xi.effect.PROTECT), 'precondition: Protect should have landed')
+
+            player.actions:useSpell(player, xi.magic.spell.BLINK)
+            player:setHP(0)
+            xi.test.world:tickEntity(player)
+            assert(player:isDead(), 'precondition: the player should be dead')
+
+            -- raise inside the 4s timeout, so only the death clears the queue
+            player:sendReraise(4)
+            player.actions:acceptRaise()
+            player:setMP(player:getMaxMP())
+            xi.test.world:skipTime(1)
+            xi.test.world:skipTime(8)
+
+            assert(not player:hasStatusEffect(xi.effect.BLINK), 'the spell queued before death was cast after the raise')
+        end)
+
         it('refuses a spell sent while still casting', function()
             player.actions:useSpell(player, xi.magic.spell.PROTECT)
             xi.test.world:tickEntity(player)
