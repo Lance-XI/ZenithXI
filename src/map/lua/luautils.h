@@ -37,6 +37,8 @@
 #include <common/types/maybe.h>
 
 #include "data/enums/content.h"
+#include "data/enums/nation.h"
+#include "data/enums/region.h"
 
 #include <array>
 #include <memory>
@@ -135,6 +137,15 @@ enum class Emote : uint8;
 
 namespace luautils
 {
+
+struct WorldPassReply
+{
+    uint8       type{ 0 };
+    int32       leftNum{ 0 };
+    int32       leftHours{ 0 };
+    int32       price{ 0 };
+    std::string code;
+};
 
 namespace detail
 {
@@ -293,9 +304,9 @@ auto GetMobByID(uint32 mobid, const sol::object& instanceObj) -> CBaseEntity*;
 auto GetEntityByID(uint32 mobid, const sol::object& instanceObj, const sol::object& arg3) -> CBaseEntity*;
 
 void  WeekUpdateConquest(uint8 updateType);
-uint8 GetRegionOwner(uint8 type);
-uint8 GetRegionInfluence(uint8 type); // Return influence graphics
-uint8 GetNationRank(uint8 nation);
+auto  GetRegionOwner(xi::Region region) -> xi::Nation;
+auto  GetRegionInfluence(xi::Region region) -> uint8; // Return influence graphics
+auto  GetNationRank(xi::Nation nation) -> uint8;
 uint8 GetConquestBalance();
 bool  IsConquestAlliance();
 void  SetRegionalConquestOverseers(uint8 regionID); // Update NPC Conquest Guard
@@ -361,6 +372,11 @@ int32 GetServerVariable(const std::string& name);
 void  SetServerVariable(const std::string& name, int32 value, const sol::object& expiry);
 int32 GetVolatileServerVariable(const std::string& varName);
 void  SetVolatileServerVariable(const std::string& varName, int32 value, const sol::object& expiry);
+auto  GetActiveWorldPass(uint32 inviterId) -> sol::object;                                           // Unexpired Gold World Pass bought by the character
+auto  IssueWorldPass(uint32 inviterId, uint32 expiry) -> uint32;                                     // Issues a Gold World Pass and returns its code, 0 on failure
+auto  GetWorldPassInvite(uint32 inviterId, uint32 inviteeId) -> sol::object;                         // The invite linking two characters, if any
+void  SetWorldPassClaims(uint32 inviteeId, uint8 inviteeClaims, uint8 inviterClaims);                // Anniversary items received by both sides of an invite
+auto  CountWorldPassInvites(uint32 inviterId) -> uint32;                                             // Invitees the character already received items with
 int32 GetCharVar(uint32 charId, const std::string& varName);                                         // Get player var directly from SQL DB
 void  SetCharVar(uint32 charId, const std::string& varName, int32 value, const sol::object& expiry); // Set player var in SQL DB using charId
 void  ClearCharVarFromAll(const std::string& varName);                                               // Deletes a specific player variable from all players
@@ -478,6 +494,8 @@ int32  OnAutomatonAbility(CBaseEntity* PTarget, CBaseEntity* PMob, CMobSkill* PM
 auto GetMonstrosityLuaTable(const monstrosity::MonstrosityData_t& data) -> sol::table;
 void SetMonstrosityLuaTable(monstrosity::MonstrosityData_t& data, sol::table table);
 void OnMonstrosityReturnToEntrance(CCharEntity* PChar);
+
+auto OnWorldPassRequest(CCharEntity* PChar, uint16 para) -> WorldPassReply;
 
 int32 OnAbilityCheck(CBaseEntity* PChar, CBaseEntity* PTarget, CAbility* PAbility, CBaseEntity** PMsgTarget);
 int32 OnPetAbility(CBaseEntity* PTarget, CBaseEntity* PMob, CMobSkill* PMobSkill, CBaseEntity* PPetMaster, action_t* action);
