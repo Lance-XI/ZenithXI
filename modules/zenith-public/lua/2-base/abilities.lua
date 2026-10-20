@@ -134,6 +134,15 @@ local effectAdjustments =
             duration = 15000, -- Changed from 30s to 45s
         },
     },
+    -- Scholar
+    tabula_rasa =
+    {
+        effectId = xi.effect.TABULA_RASA,
+        add =
+        {
+            duration = -120000, -- Reverted from 180s to original 60s
+        },
+    },
     -- Puppetmaster
     overdrive =
     {
