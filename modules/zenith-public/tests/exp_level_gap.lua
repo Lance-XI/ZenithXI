@@ -11,7 +11,7 @@ describe('Zenith EXP level gap', function()
     ---@type CTestEntity
     local mob
 
-    local function expFor(member)
+    local function resultFor(member)
         return xi.experiencePoints.calculate(GetPlayerByID(member:getID()), GetMobByID(mob:getID()),
         {
             baseExp            = 200,
@@ -24,7 +24,11 @@ describe('Zenith EXP level gap', function()
             regionId           = member:getCurrentRegion(),
             chainNumber        = 0,
             chainActive        = false,
-        }).exp
+        })
+    end
+
+    local function expFor(member)
+        return resultFor(member).exp
     end
 
     local function party(lowLevel, highLevel)
@@ -52,6 +56,17 @@ describe('Zenith EXP level gap', function()
 
         assert(expFor(low) == 0, 'the low member got EXP')
         assert(expFor(high) == 0, 'the high member got EXP')
+    end)
+
+    it('does not spend Dedication or start an EXP chain with a 10 level gap', function()
+        party(10, 20)
+        low:addStatusEffect(xi.effect.DEDICATION, { power = 50, subPower = 1000, duration = 3600, origin = low })
+
+        local result = resultFor(low)
+
+        assert(result.exp == 0, 'the low member got EXP')
+        assert(result.chainWindow == 0, 'a level gap kill opened an EXP chain window')
+        assert(low:getStatusEffect(xi.effect.DEDICATION):getSubPower() == 1000, 'a level gap kill used up Dedication')
     end)
 
     it('ignores a member far from the mob', function()

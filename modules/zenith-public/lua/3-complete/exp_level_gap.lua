@@ -40,14 +40,16 @@ local hasLevelGap = function(member, mob)
     return lowest ~= nil and highest - lowest > maxLevelGap
 end
 
+-- Checked before base: base spends the Dedication pool and returns an EXP chain window, both of
+-- which must not happen for a kill that gives no EXP. A table with 0 EXP and no chain window makes
+-- the caller skip the EXP message and the chain; returning nil would do the same, but the engine
+-- logs it as an invalid return type on every kill.
 m:addOverride('xi.experiencePoints.calculate', function(member, mob, data)
-    local result = super(member, mob, data)
-
-    if result and hasLevelGap(member, mob) then
-        result.exp = 0
+    if hasLevelGap(member, mob) then
+        return { exp = 0, chainActive = false, chainWindow = 0 }
     end
 
-    return result
+    return super(member, mob, data)
 end)
 
 return m
