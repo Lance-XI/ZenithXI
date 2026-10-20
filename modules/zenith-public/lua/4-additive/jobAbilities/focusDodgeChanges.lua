@@ -14,7 +14,16 @@ local getAddedBonus = function(player)
     return first, second
 end
 
--- These modify the bonuses applied by the effects, while recast times are handled via SQL
+-- Both last 90 seconds
+local duration = 90000
+
+-- Effects restored on zone-in keep their remaining time (ZoneInTime is 0 until onGameIn runs)
+local isFreshEffect = function(target)
+    return not target:isPC() or target:getLocalVar('ZoneInTime') ~= 0
+end
+
+-- These modify the bonuses applied by the effects, while recast times are handled via SQL.
+-- They replace base's onEffectGain, so the duration is set here too.
 
 -- Override the Focus status effect to apply the custom bonuses
 m:addOverride('xi.effects.focus.onEffectGain', function(target, effect)
@@ -23,6 +32,10 @@ m:addOverride('xi.effects.focus.onEffectGain', function(target, effect)
 
     effect:addMod(xi.mod.ACC, baseAcc + jpModBonus)
     effect:addMod(xi.mod.CRITHITRATE, baseCrit)
+
+    if isFreshEffect(target) then
+        effect:setDuration(duration)
+    end
 end)
 
 -- Override the Dodge status effect to apply the custom bonuses
@@ -32,6 +45,10 @@ m:addOverride('xi.effects.dodge.onEffectGain', function(target, effect)
 
     effect:addMod(xi.mod.EVA, baseEva + jpModBonus)
     effect:addMod(xi.mod.GUARD, baseGuard)
+
+    if isFreshEffect(target) then
+        effect:setDuration(duration)
+    end
 end)
 
 return m
