@@ -1413,10 +1413,11 @@ local fileExists = function(path)
     return false
 end
 
+-- data/zones folders are lowercase, which matters on Linux.
 -- A mob's script table is named after its mobs.yaml template ("  Nue:"), or after the
 -- script a spawn names when that differs ("    script:   Gyre-Carlin")
 local yamlHasMob = function(zoneName, mobName)
-    local file = io.open(string.format('data/zones/%s/mobs.yaml', zoneName), 'r')
+    local file = io.open(string.format('data/zones/%s/mobs.yaml', string.lower(zoneName)), 'r')
     if not file then
         return false
     end
