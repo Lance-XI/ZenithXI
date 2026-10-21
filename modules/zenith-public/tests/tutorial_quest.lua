@@ -1,13 +1,13 @@
 -- ZenithXI tutorial NPC quests (modules/zenith-public/lua/3-complete/tutorial_quest.lua).
 --
--- Records of Eminence step rewards without the Memorandoll, and the quest line ends with the
--- Raising Earring, as it did before the April 2026 update.
+-- The module's own copy of base's tutorial quest replaces it: the Records of Eminence step rewards
+-- without the Memorandoll, and the quest line ends with the Raising Earring.
 
 describe('Zenith tutorial quests', function()
     ---@type CClientEntityPair
     local player
 
-    local progVar = 'HQuest[Tutorial]Prog'
+    local progVar = 'HQuest[ZenithTutorial]Prog'
 
     before_each(function()
         player = xi.test.world:spawnPlayer()
@@ -37,11 +37,22 @@ describe('Zenith tutorial quests', function()
         player.entities:gotoAndTrigger('Gulldago', { eventId = 709 })
 
         assert(player:hasItem(xi.item.RAISING_EARRING), 'no Raising Earring')
-        assert(player:getCharVar(progVar) == 12, string.format('expected the finished Prog 12, got %d', player:getCharVar(progVar)))
+        assert(player:getCharVar(progVar) == 8, string.format('expected the finished Prog 8, got %d', player:getCharVar(progVar)))
 
         -- Only the finished dialog from here on
         player.entities:gotoAndTrigger('Gulldago', { eventId = 718 })
         assert(not player:hasItem(xi.item.WARP_RING), 'the quest line went on to the Warp Ring')
+    end)
+
+    it('replaces the base tutorial quest', function()
+        -- Base's quest at its Raising Earring step would play 708/709; ours starts with the introduction
+        player:setCharVar('HQuest[Tutorial]Prog', 7)
+        player:setLevel(5)
+
+        player.entities:gotoAndTrigger('Gulldago', { eventId = 719 })
+
+        assert(player:getCharVar(progVar) == 1, 'the introduction did not start the module quest')
+        assert(not player:hasItem(xi.item.RAISING_EARRING), 'the base tutorial quest still answered')
     end)
 
     it('gives the finished dialog to a character already past the earring', function()
