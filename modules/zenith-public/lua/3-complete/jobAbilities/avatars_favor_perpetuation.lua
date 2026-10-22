@@ -40,16 +40,16 @@ local isFavorAvatar = function(petId)
         petId == xi.petId.SIREN
 end
 
--- Set while Favor wears off: the effect is still on the master during onEffectLose
-local favorWearingOff = false
+-- Summoners whose Favor is wearing off, by id: the effect is still on them during onEffectLose
+local favorWearingOff = {}
 
 m:addOverride('xi.job_utils.summoner.getPerpetuationCost', function(pet)
     local cost   = super(pet)
     local master = pet:getMaster()
 
     if
-        not favorWearingOff and
         master and
+        not favorWearingOff[master:getID()] and
         master:hasStatusEffect(xi.effect.AVATARS_FAVOR) and
         isFavorAvatar(pet:getPetID())
     then
@@ -75,9 +75,16 @@ end)
 m:addOverride('xi.effects.avatars_favor.onEffectLose', function(target, effect)
     super(target, effect)
 
-    favorWearingOff = true
-    refreshPerpetuation(target)
-    favorWearingOff = false
+    -- Only this summoner, and cleared even if the recalculation errors
+    local id = target:getID()
+
+    favorWearingOff[id] = true
+    local ok, err = pcall(refreshPerpetuation, target)
+    favorWearingOff[id] = nil
+
+    if not ok then
+        print(string.format('[avatars_favor_perpetuation] Error: %s', tostring(err)))
+    end
 end)
 
 return m

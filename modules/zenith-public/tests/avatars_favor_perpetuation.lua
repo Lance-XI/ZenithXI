@@ -28,4 +28,23 @@ describe('Zenith Avatar\'s Favor perpetuation', function()
     it('raises the perpetuation of Carbuncle by 2 while Favor is up', function()
         checkFavor(xi.petId.CARBUNCLE, 2)
     end)
+
+    it('keeps the surcharge of other summoners when one Favor wears off', function()
+        local first  = xi.test.world:spawnPlayer({ zone = xi.zone.WEST_RONFAURE, job = xi.job.SMN, level = 75 })
+        local second = xi.test.world:spawnPlayer({ zone = xi.zone.WEST_RONFAURE, job = xi.job.SMN, level = 75 })
+        first:spawnPet(xi.petId.IFRIT)
+        second:spawnPet(xi.petId.IFRIT)
+
+        local cost = second:getMod(xi.mod.AVATAR_PERPETUATION)
+
+        for _, summoner in ipairs({ first, second }) do
+            summoner:addStatusEffect(xi.effect.AVATARS_FAVOR, { power = 1, duration = 7200, origin = summoner, tick = 10 })
+        end
+
+        first:delStatusEffect(xi.effect.AVATARS_FAVOR)
+
+        -- A later recalculation for the second summoner still adds the surcharge
+        xi.job_utils.summoner.applyPerpetuationCost(GetPlayerByID(second:getID()), second:getPet())
+        assert(second:getMod(xi.mod.AVATAR_PERPETUATION) == cost + 3, 'the second summoner lost the Favor surcharge')
+    end)
 end)
