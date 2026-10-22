@@ -4,9 +4,9 @@ local m = Module:new('c-j_avatarsFavorPerpetuation')
 -- Avatar's Favor perpetuation cost (ZENITHDEV-207)
 -- Base's Avatar's Favor never changes the avatar's perpetuation cost. Over the years it has:
 --   original (WotG)  -2 perpetuation (base already applies the avatar penalty when ENABLE_SOA is 0)
---   October 2014     +3 for the celestial avatars, +2 for Carbuncle, no avatar penalty
+--   October 2014     +3 perpetuation, +2 for Carbuncle
 --   later            +25% of the perpetuation cost
--- Zenith uses the original. Pick another with the `version` setting below.
+-- Zenith uses October 2014. Pick another with the `version` setting below.
 --
 -- getPerpetuationCost adds the change while the master has Avatar's Favor, and the cost is
 -- recalculated when Favor is gained or lost (base only recalculates it with the pet's stats).
@@ -19,13 +19,11 @@ local versions =
     end,
 
     october2014 = function(petId, cost)
-        if petId >= xi.petId.IFRIT and petId <= xi.petId.RAMUH then
-            return cost + 3
-        elseif petId == xi.petId.CARBUNCLE then
+        if petId == xi.petId.CARBUNCLE then
             return cost + 2
         end
 
-        return cost
+        return cost + 3
     end,
 
     modern = function(petId, cost)
@@ -33,7 +31,7 @@ local versions =
     end,
 }
 
-local version = versions.original
+local version = versions.october2014
 
 -- Same avatars Favor works with (scripts/globals/avatars_favor.lua)
 local isFavorAvatar = function(petId)
