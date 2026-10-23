@@ -5,7 +5,8 @@ local m = Module:new('c-j_impetus')
 -- Half of base's bonus per landed hit, reset on a miss, up to 50 stacks:
 --   attack           +1 per stack instead of +2   (max +50)
 --   critical rate    +1% every second stack instead of every stack (max +25%)
--- The augment bonuses (Bhikku/Tantra body: accuracy and critical damage) are unchanged.
+--   critical damage  augment (Bhikku/Tantra body) bonus every second stack instead of every stack
+-- The augment's accuracy bonus is unchanged.
 -- super runs first so the duration change in 2-base/abilities.lua still applies; base's hit and
 -- miss listeners it adds are then replaced. onEffectLose is base's, which removes both listeners.
 -- A miss takes the bonus back with negative addMod calls: status effects have no delMod binding,
@@ -35,14 +36,17 @@ m:addOverride('xi.effects.impetus.onEffectGain', function(target, effect)
             return
         end
 
+        -- 1 on every second stack, 0 otherwise
+        local critStep = critForStacks(stacks) - critForStacks(stacks - 1)
+
         effectArg:setPower(stacks)
         effectArg:addMod(xi.mod.ATT, 1)
-        effectArg:addMod(xi.mod.CRITHITRATE, critForStacks(stacks) - critForStacks(stacks - 1))
+        effectArg:addMod(xi.mod.CRITHITRATE, critStep)
 
         local subPower = effectArg:getSubPower()
         if subPower ~= 0 then
             effectArg:addMod(xi.mod.ACC, 2)
-            effectArg:addMod(xi.mod.CRIT_DMG_INCREASE, math.floor(subPower / 2))
+            effectArg:addMod(xi.mod.CRIT_DMG_INCREASE, critStep * math.floor(subPower / 2))
         end
     end)
 
@@ -60,7 +64,7 @@ m:addOverride('xi.effects.impetus.onEffectGain', function(target, effect)
         local subPower = effectArg:getSubPower()
         if subPower ~= 0 then
             effectArg:addMod(xi.mod.ACC, -2 * stacks)
-            effectArg:addMod(xi.mod.CRIT_DMG_INCREASE, -math.floor(subPower / 2) * stacks)
+            effectArg:addMod(xi.mod.CRIT_DMG_INCREASE, -critForStacks(stacks) * math.floor(subPower / 2))
         end
     end)
 end)
