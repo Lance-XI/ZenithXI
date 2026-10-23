@@ -2,18 +2,19 @@ local m = Module:new('c-j_impetus')
 
 -----------------------------------
 -- Impetus Override
--- Half of base's bonus per landed hit, reset on a miss, up to 50 stacks:
---   attack           +1 per stack instead of +2   (max +50)
---   critical rate    +1% every second stack instead of every stack (max +25%)
---   critical damage  augment (Bhikku/Tantra body) bonus every second stack instead of every stack
--- The augment's accuracy bonus is unchanged.
+-- Half of base's bonus per landed hit, reset on a miss, up to 30 stacks instead of 50:
+--   attack           +1 per stack instead of +2   (max +30)
+--   critical rate    +1% every second stack instead of every stack (max +15%)
+-- With the Bhikku/Tantra body augment, also halved:
+--   accuracy         +1 per stack instead of +2   (max +30)
+--   critical damage  the augment's bonus every second stack instead of every stack
 -- super runs first so the duration change in 2-base/abilities.lua still applies; base's hit and
 -- miss listeners it adds are then replaced. onEffectLose is base's, which removes both listeners.
 -- A miss takes the bonus back with negative addMod calls: status effects have no delMod binding,
 -- so base's miss listener errors and never resets the bonus.
 -----------------------------------
 
-local maxStacks = 50
+local maxStacks = 30
 
 local critForStacks = function(stacks)
     return math.floor(stacks / 2)
@@ -45,7 +46,7 @@ m:addOverride('xi.effects.impetus.onEffectGain', function(target, effect)
 
         local subPower = effectArg:getSubPower()
         if subPower ~= 0 then
-            effectArg:addMod(xi.mod.ACC, 2)
+            effectArg:addMod(xi.mod.ACC, 1)
             effectArg:addMod(xi.mod.CRIT_DMG_INCREASE, critStep * math.floor(subPower / 2))
         end
     end)
@@ -63,7 +64,7 @@ m:addOverride('xi.effects.impetus.onEffectGain', function(target, effect)
 
         local subPower = effectArg:getSubPower()
         if subPower ~= 0 then
-            effectArg:addMod(xi.mod.ACC, -2 * stacks)
+            effectArg:addMod(xi.mod.ACC, -stacks)
             effectArg:addMod(xi.mod.CRIT_DMG_INCREASE, -critForStacks(stacks) * math.floor(subPower / 2))
         end
     end)

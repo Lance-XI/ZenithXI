@@ -1,7 +1,7 @@
 -- ZenithXI Impetus (modules/zenith-public/lua/3-complete/jobAbilities/impetus.lua).
 --
--- Each landed hit adds +1 attack, and every second one +1% critical rate (half of base).
--- With the body augment, every second hit also adds its critical damage bonus.
+-- Each landed hit adds +1 attack, and every second one +1% critical rate (half of base), up to 30 stacks.
+-- With the body augment, each hit also adds +1 accuracy, and every second one its critical damage bonus.
 -- A miss removes everything.
 
 describe('Zenith Impetus', function()
@@ -59,7 +59,7 @@ describe('Zenith Impetus', function()
 
         hit(3)
         assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 5, 'critical damage after 3 hits')
-        assertGain(xi.mod.ACC, acc, 6, 'accuracy after 3 hits')
+        assertGain(xi.mod.ACC, acc, 3, 'accuracy after 3 hits')
 
         hit(1)
         assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 10, 'critical damage after 4 hits')
@@ -67,5 +67,24 @@ describe('Zenith Impetus', function()
         miss()
         assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 0, 'critical damage after a miss')
         assertGain(xi.mod.ACC, acc, 0, 'accuracy after a miss')
+    end)
+
+    it('stops stacking at 30 hits', function()
+        player:getStatusEffect(xi.effect.IMPETUS):setSubPower(10)
+
+        local att     = player:getMod(xi.mod.ATT)
+        local crit    = player:getMod(xi.mod.CRITHITRATE)
+        local acc     = player:getMod(xi.mod.ACC)
+        local critDmg = player:getMod(xi.mod.CRIT_DMG_INCREASE)
+
+        hit(35)
+        assertGain(xi.mod.ATT, att, 30, 'attack after 35 hits')
+        assertGain(xi.mod.CRITHITRATE, crit, 15, 'crit after 35 hits')
+        assertGain(xi.mod.ACC, acc, 30, 'accuracy after 35 hits')
+        assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 75, 'critical damage after 35 hits')
+
+        miss()
+        assertGain(xi.mod.ATT, att, 0, 'attack after a miss at the cap')
+        assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 0, 'critical damage after a miss at the cap')
     end)
 end)
