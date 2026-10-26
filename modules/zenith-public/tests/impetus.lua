@@ -1,6 +1,6 @@
 -- ZenithXI Impetus (modules/zenith-public/lua/3-complete/jobAbilities/impetus.lua).
 --
--- Each landed hit adds +1 attack, and every second one +1% critical rate (half of base), up to 30 stacks.
+-- Each landed hit adds +1 attack, and every second one +1% critical rate (half of base), up to 20 stacks.
 -- With the body augment, each hit also adds +1 accuracy, and every second one its critical damage bonus.
 -- A miss removes everything.
 
@@ -69,7 +69,7 @@ describe('Zenith Impetus', function()
         assertGain(xi.mod.ACC, acc, 0, 'accuracy after a miss')
     end)
 
-    it('stops stacking at 30 hits', function()
+    it('stops stacking at 20 hits', function()
         player:getStatusEffect(xi.effect.IMPETUS):setSubPower(10)
 
         local att     = player:getMod(xi.mod.ATT)
@@ -77,11 +77,11 @@ describe('Zenith Impetus', function()
         local acc     = player:getMod(xi.mod.ACC)
         local critDmg = player:getMod(xi.mod.CRIT_DMG_INCREASE)
 
-        hit(35)
-        assertGain(xi.mod.ATT, att, 30, 'attack after 35 hits')
-        assertGain(xi.mod.CRITHITRATE, crit, 15, 'crit after 35 hits')
-        assertGain(xi.mod.ACC, acc, 30, 'accuracy after 35 hits')
-        assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 75, 'critical damage after 35 hits')
+        hit(25)
+        assertGain(xi.mod.ATT, att, 20, 'attack after 25 hits')
+        assertGain(xi.mod.CRITHITRATE, crit, 10, 'crit after 25 hits')
+        assertGain(xi.mod.ACC, acc, 20, 'accuracy after 25 hits')
+        assertGain(xi.mod.CRIT_DMG_INCREASE, critDmg, 50, 'critical damage after 25 hits')
 
         miss()
         assertGain(xi.mod.ATT, att, 0, 'attack after a miss at the cap')

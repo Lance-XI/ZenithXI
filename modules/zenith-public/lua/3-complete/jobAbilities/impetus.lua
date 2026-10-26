@@ -2,11 +2,11 @@ local m = Module:new('c-j_impetus')
 
 -----------------------------------
 -- Impetus Override
--- Half of base's bonus per landed hit, reset on a miss, up to 30 stacks instead of 50:
---   attack           +1 per stack instead of +2   (max +30)
---   critical rate    +1% every second stack instead of every stack (max +15%)
+-- Half of base's bonus per landed hit, reset on a miss, up to 20 stacks instead of 50:
+--   attack           +1 per stack instead of +2   (max +20)
+--   critical rate    +1% every second stack instead of every stack (max +10%)
 -- With the Bhikku/Tantra body augment, also halved:
---   accuracy         +1 per stack instead of +2   (max +30)
+--   accuracy         +1 per stack instead of +2   (max +20)
 --   critical damage  the augment's bonus every second stack instead of every stack
 -- super runs first so the duration change in 2-base/abilities.lua still applies; base's hit and
 -- miss listeners it adds are then replaced. onEffectLose is base's, which removes both listeners.
@@ -14,7 +14,7 @@ local m = Module:new('c-j_impetus')
 -- so base's miss listener errors and never resets the bonus.
 -----------------------------------
 
-local maxStacks = 30
+local maxStacks = 20
 
 local critForStacks = function(stacks)
     return math.floor(stacks / 2)
