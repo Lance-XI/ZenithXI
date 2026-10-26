@@ -118,7 +118,7 @@ xi.maps.mapInfo = {
     },
     [10] = {
         xi.keyItem.MAP_OF_BEADEAUX,
-        600,
+        3000, -- era price, as in LSB's modules/era/lua/globals/maps.lua (base has 600)
         {
             xi.region.BASTOK,
         },

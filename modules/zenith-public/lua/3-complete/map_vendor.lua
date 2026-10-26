@@ -8,44 +8,38 @@ require('modules/module_utils')
 
 local m = Module:new('map_vendor')
 
+-- A map is for sale here when it has a price (-1 means not sold), the player does not own it yet,
+-- and the vendor's region is in its region list. The menu and the purchase both use this, so a
+-- client cannot buy a map the menu would not show.
+local function isMapForSale(player, mapId)
+    local mapEntry = xi.maps.mapInfo[mapId]
+    if
+        not mapEntry or
+        type(mapEntry[2]) ~= 'number' or
+        mapEntry[2] <= 0 or
+        player:hasKeyItem(mapEntry[1])
+    then
+        return false
+    end
+
+    local currentRegion = player:getZone():getRegionID()
+    for _, region in ipairs(mapEntry[3] or {}) do
+        if region == currentRegion then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function getMapEventParams(player)
     local paramTable = { 0, 0, 0 }
-    local currentRegion = player:getZone():getRegionID()
 
     for mapId = 0, #xi.maps.mapInfo do
-        local mapEntry = xi.maps.mapInfo[mapId]
         local paramPos = math.floor((mapId) / 32) + 1
-        local displayMap = true
 
-        -- Remove all maps that should not be sold
-        if mapEntry[2] == -1 then
-            displayMap = false
-
-        -- Check if the player has the key item for this map
-        -- remove from the vendor if player already has it
-        elseif player:hasKeyItem(mapEntry[1]) then
-            displayMap = false
-
-        -- Check if the current region is allowed to sell this map
-        else
-            local regionAllowed = false
-            if mapEntry[3] ~= nil then
-                -- If the map entry has a region list, check if the current region is in that list
-                for _, region in ipairs(mapEntry[3]) do
-                    if region == currentRegion then
-                        regionAllowed = true
-                        break
-                    end
-                end
-            end
-
-            -- If the region is not allowed, remove from the vendor
-            if not regionAllowed then
-                displayMap = false
-            end
-        end
-
-        if not displayMap then
+        -- a set bit hides the map from the vendor's menu
+        if not isMapForSale(player, mapId) then
             paramTable[paramPos] = bit.bor(paramTable[paramPos], bit.lshift(1, mapId))
         end
     end
@@ -66,10 +60,10 @@ m:addOverride('xi.maps.onEventUpdate', function(player, csid, option, npc)
 
     local mapId = bit.rshift(option, 16)
 
+    -- The option comes from the client, so check it again before taking any gil
     if
-        mapId >= 0 and
-        mapId <= #xi.maps.mapInfo and
-        bit.band(option, 0xF) == 1
+        bit.band(option, 0xF) == 1 and
+        isMapForSale(player, mapId)
     then
         local mapCost = xi.maps.mapInfo[mapId][2]
 
