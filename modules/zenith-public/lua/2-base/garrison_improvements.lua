@@ -1,6 +1,6 @@
 -- Garrison improvements: grants outpost warps on victory
 
-local m = Module:new('garrison_improvements')
+local m = Module:new('b_garrison_improvements')
 
 -- Override the gil payout function to also grant outpost warps
 m:addOverride('xi.garrison.handleGilPayout', function(levelCap, players)
@@ -21,7 +21,7 @@ m:addOverride('xi.garrison.handleGilPayout', function(levelCap, players)
             [xi.region.ARAGONEU]         = 'The Aragoneu Region',
             [xi.region.FAUREGANDI]       = 'The Fauregandi Region',
             [xi.region.VALDEAUNIA]       = 'The Valdeaunia Region',
-            [xi.region.QUFIMISLAND]      = 'The Qufim Island Region',
+            [xi.region.QUFIM_ISLAND]     = 'The Qufim Island Region',
             [xi.region.LITELOR]          = 'The Li\'Telor Region',
             [xi.region.KUZOTZ]           = 'The Kuzotz Region',
             [xi.region.VOLLBOW]          = 'The Vollbow Region',
@@ -29,7 +29,7 @@ m:addOverride('xi.garrison.handleGilPayout', function(levelCap, players)
             [xi.region.ELSHIMO_UPLANDS]  = 'The Elshimo Uplands Region',
             [xi.region.TULIA]            = 'The Tu\'Lia Region',
             [xi.region.MOVALPOLOS]       = 'The Movalpolos Region',
-            [xi.region.TAVNAZIANARCH]    = 'The Tavnazian Archipelago Region',
+            [xi.region.TAVNAZIAN_ARCHIPELAGO] = 'The Tavnazian Archipelago Region',
         }
 
         local regionName = regionNames[region] or 'This zone\'s region'

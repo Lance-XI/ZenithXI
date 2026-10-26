@@ -1,12 +1,13 @@
--- -----------------------------------
--- -- HNM Respawn Windows Module
--- --
--- -- This module overrides the respawn times for specific NMs to have:
--- -- - Respawn time: 21 hours to 21.5 hours (75600 to 77400 seconds)
--- -- - Spawn window: 5 minutes (300 seconds)
--- -- - Respawn time: 71 hours to 72 hours (255600 to 259200 seconds)
--- -- - Spawn window: 10 minutes (600 seconds)
--- -----------------------------------
+-----------------------------------
+-- HNM Respawn Windows Module
+--
+-- Replaces LSB's respawn roll for the NMs below with base hours plus one of seven windows,
+-- rolled again for every respawn:
+-- - 21 hours + 0-6 windows of 5 minutes (75600 to 77400 seconds)
+-- - 71 hours + 0-6 windows of 10 minutes (255600 to 259200 seconds)
+-- The end of the window is saved in the server var '[Respawn]<name>_<id>'
+-- (zxi.mobHelpers.getRespawnVarName) and restored by Zone.onInitialize after a restart.
+-----------------------------------
 
 require('modules/module_utils')
 local m = Module:new('c-m_hnm_respawn_windows')
@@ -64,7 +65,6 @@ local beastmenNMs = {
         nqIdName = 'ORCISH_OVERLORD',
         hqName = 'Overlord_Bakgodek',
         hqOffset = 1,
-        popVar = '[POP]Overlord_Bakgodek',
         phVar = '[PH]Overlord_Bakgodek',
         respawnHours = 21,
         respawnWindowLengthDuration = 5
@@ -76,7 +76,6 @@ local beastmenNMs = {
         nqIdName = 'YAGUDO_AVATAR',
         hqName = 'Tzee_Xicu_the_Manifest',
         hqOffset = 3, -- Different offset due to elementals
-        popVar = '[POP]Tzee_Xicu_the_Manifest',
         phVar = '[PH]Tzee_Xicu_the_Manifest',
         respawnHours = 21,
         respawnWindowLengthDuration = 5
@@ -88,14 +87,46 @@ local beastmenNMs = {
         nqIdName = 'DIAMOND_QUADAV',
         hqName = 'ZaDha_Adamantking',
         hqOffset = 1,
-        popVar = '[POP]Za_Dha_Adamantking',
         phVar = '[PH]Za_Dha_Adamantking',
         respawnHours = 21,
         respawnWindowLengthDuration = 5
     }
 }
 
+-- NMs that LSB spawns only when its own check allows it: the hours of the night (Xolotl), the
+-- zone's weather (Zone.onZoneWeatherChange of Cape Teriggan, Western Altepa Desert and Qufim
+-- Island) or a placeholder (Etemmu turns into Ereshkigal). A saved time that has passed never
+-- spawns them directly; the window has opened and LSB's check does the rest.
+local conditionalNMs = set{ 'Xolotl', 'Kreutzet', 'King_Vinegarroon', 'Dosetsu_Tree', 'Ereshkigal' }
+
+-- Local var on an NM that zone init took back down to keep its saved time (see restoreOrSetRespawnTime)
+local restoreDespawnVar = '[HNM]restoreDespawn'
+
 ----------------------------------- HELPER FUNCTIONS -----------------------------------
+
+-- Base hours plus one of seven windows, rolled for every respawn
+local function windowedRespawn(respawnHours, windowMinutes)
+    return math.random(0, 6) * (windowMinutes * 60) + (respawnHours * 3600)
+end
+
+-- setRespawnTime always allows a respawn again, so this re-applies the condition of the NMs whose
+-- spawn LSB leaves to a weather check or a placeholder. The timer then only marks when the window opens.
+local function blockConditionalRespawn(mob, respawnAt)
+    local name = mob:getName()
+
+    if
+        name == 'Kreutzet' or     -- allowed again in wind weather by Cape Teriggan's onZoneWeatherChange
+        name == 'Ereshkigal' or   -- spawned by its placeholder Etemmu, see the Etemmu onMobRoam override
+        name == 'Dosetsu_Tree'    -- spawned by Qufim Island's onZoneWeatherChange in thunder weather
+    then
+        DisallowRespawn(mob:getID(), true)
+    end
+
+    if name == 'Dosetsu_Tree' then
+        -- Qufim Island spawns it on the next thunder weather after this time
+        mob:setLocalVar('respawn', respawnAt)
+    end
+end
 
 -- Helper function to set respawn time and persist it
 local function setAndPersistRespawnTime(mob, respawnTimeCalc)
@@ -104,7 +135,24 @@ local function setAndPersistRespawnTime(mob, respawnTimeCalc)
 
         mob:setRespawnTime(respawnTimeCalc)
         SetServerVariable(varName, GetSystemTime() + respawnTimeCalc)
+        blockConditionalRespawn(mob, GetSystemTime() + respawnTimeCalc)
     end
+end
+
+-- True for the despawn that restoreOrSetRespawnTime started: the NM keeps its saved time, and
+-- LSB's despawn logic (a new respawn roll, a spawned follow-up NM) is skipped because nothing died.
+local function isRestoreDespawn(mob)
+    if mob:getLocalVar(restoreDespawnVar) ~= 1 then
+        return false
+    end
+
+    mob:setLocalVar(restoreDespawnVar, 0)
+
+    local savedRespawnTime = GetServerVariable(zxi.mobHelpers.getRespawnVarName(mob))
+    mob:setRespawnTime(math.max(savedRespawnTime - GetSystemTime(), 1))
+    blockConditionalRespawn(mob, savedRespawnTime)
+
+    return true
 end
 
 -- Generic function to restore or set mob respawn time on zone init
@@ -117,30 +165,35 @@ local function restoreOrSetRespawnTime(mobId, respawnTimeCalc)
         local savedRespawnTime = GetServerVariable(varName)
         local currentTime = GetSystemTime()
 
-        -- Check if we have a valid saved respawn time (not 0 and not nil)
-        if savedRespawnTime and savedRespawnTime > 0 then
-            -- If saved respawn time is greater than current time, restore it
-            if savedRespawnTime > currentTime then
-                mob:setRespawnTime(savedRespawnTime - currentTime)
-            elseif
-                mobName == 'Kreutzet' or
-                mobName == 'King_Vinegarroon'
-            then
-                -- Special case for Kreutzet and KV, to ensure they don't respawn with no weather
-                -- Disallow respawn, this will get set to false if the weather is correct
-                DisallowRespawn(mobId, true)
-                mob:setRespawnTime(10)
-            -- If saved respawn time has passed, check if mob is already spawned if not spawn it
-            else
-                if not mob:isSpawned() then
-                    SpawnMob(mobId)
-                end
+        if savedRespawnTime > currentTime then
+            mob:setRespawnTime(savedRespawnTime - currentTime)
+            blockConditionalRespawn(mob, savedRespawnTime)
+
+            -- The engine spawns NMs with a normal spawn type when the zone loads. Take it back down;
+            -- its despawn override sees the local var and keeps the saved time.
+            if mob:isSpawned() then
+                mob:setLocalVar(restoreDespawnVar, 1)
+                DespawnMob(mobId)
             end
-        else
-            -- No valid saved respawn time found, set a new one
-            local newRespawnTime = respawnTimeCalc
-            mob:setRespawnTime(newRespawnTime)
-            SetServerVariable(varName, GetSystemTime() + newRespawnTime)
+        elseif savedRespawnTime > 0 then
+            if conditionalNMs[mobName] then
+                mob:setRespawnTime(1)
+                blockConditionalRespawn(mob, savedRespawnTime)
+
+                if mobName == 'King_Vinegarroon' then
+                    -- Western Altepa Desert's onZoneWeatherChange allows it in earth weather
+                    DisallowRespawn(mobId, true)
+                end
+            elseif not mob:isSpawned() then
+                -- Drop the timer LSB's onMobInitialize registered first: a timer that comes due
+                -- while the NM is up spawns it again where it stands.
+                mob:setRespawnTime(0)
+                SpawnMob(mobId)
+                mob:setRespawnTime(respawnTimeCalc)
+            end
+        elseif not mob:isSpawned() then
+            -- Nothing saved: roll a window. An NM that is already up gets one when it despawns.
+            setAndPersistRespawnTime(mob, respawnTimeCalc)
         end
     end
 end
@@ -148,15 +201,10 @@ end
 -- Restore or set respawn on a contiguous group of mobs
 -- startId         = first mob ID
 -- count           = how many sequential IDs
--- namePrefix      = base name used in ServerVariable key
 -- respawnTimeCalc = respawn calculation in seconds
--- skipOffset      = (optional) offset within [0..count] to skip
-local function restoreGroup(startId, count, respawnTimeCalc, skipOffset)
+local function restoreGroup(startId, count, respawnTimeCalc)
     for offset = 0, count - 1 do
-        if offset ~= skipOffset then
-            local id = startId + offset
-            restoreOrSetRespawnTime(id, respawnTimeCalc)
-        end
+        restoreOrSetRespawnTime(startId + offset, respawnTimeCalc)
     end
 end
 
@@ -169,7 +217,6 @@ local function createStandardNMOverrides(nmList)
         local mobName = entry[2]
         local respawnHours = entry[3]
         local respawnWindowLengthDuration = entry[4]
-        local respawnTimeCalc = math.random(0, 6) * (respawnWindowLengthDuration * 60) + (respawnHours * 3600)
 
         -- Zone initialization override
         -- Zone and mob overrides defer until their script loads, so multi-mapserver setups
@@ -180,8 +227,7 @@ local function createStandardNMOverrides(nmList)
             super(zone)
             local mob = zone:queryEntitiesByName(mobName)[1]
             if mob then
-                -- randomly choose 1 of 7 windows, multiply by window length then add respawn hours
-                restoreOrSetRespawnTime(mob:getID(), respawnTimeCalc)
+                restoreOrSetRespawnTime(mob:getID(), windowedRespawn(respawnHours, respawnWindowLengthDuration))
             end
         end)
 
@@ -192,8 +238,24 @@ local function createStandardNMOverrides(nmList)
         local mobPath = fmt('xi.zones.{}.mobs.{}', zoneName, mobName)
         m:addOverride(mobPath .. '.onMobDespawn',
         function(mob)
+            if isRestoreDespawn(mob) then
+                return
+            end
+
             super(mob)
-            setAndPersistRespawnTime(mob, respawnTimeCalc)
+
+            if
+                mobName == 'Xolotl' and
+                mob:getLocalVar('killed') ~= 1
+            then
+                -- Despawned at dawn without being killed: LSB brings him back the next night,
+                -- and after a restart his onMobInitialize rolls a new timer.
+                SetServerVariable(zxi.mobHelpers.getRespawnVarName(mob), 0)
+
+                return
+            end
+
+            setAndPersistRespawnTime(mob, windowedRespawn(respawnHours, respawnWindowLengthDuration))
         end)
     end
 end
@@ -201,67 +263,44 @@ end
 -- Create overrides for standard NMs
 createStandardNMOverrides(nmsToModify)
 
------------------------------------ BEASTMEN NQ/HQ HNM LOGIC -----------------------------------
---decide wether to spawn NQ or HQ version of beastmen NMs
---returns true if the mob was spawned or respawn time was set, false otherwise
-local function processNqHqSpawn(primaryId, secondaryId, name, currentTime)
-    local varName = zxi.mobHelpers.getRespawnVarName(name, primaryId)
-    local respawn   = GetServerVariable(varName)
-    if respawn and respawn > 0 then
-        local primaryMob = GetMobByID(primaryId)
+-- Ereshkigal: its placeholder turns into it only once the module's window has opened
+local xarcabardId = zones[xi.zone.XARCABARD]
 
-        if respawn > currentTime then
-            DisallowRespawn(secondaryId, true)
-            DisallowRespawn(primaryId,  false)
-            if primaryMob then
-                primaryMob:setRespawnTime(respawn - currentTime)
-            end
-        else
-            if primaryMob and not primaryMob:isSpawned() then
-                SpawnMob(primaryId)
-            end
-        end
-
-        return true
+m:addOverride('xi.zones.Xarcabard.mobs.Etemmu.onMobRoam',
+function(mob)
+    if
+        mob:getID() == xarcabardId.mob.ERESHKIGAL - 1 and
+        mob:getLocalVar('phDespawnTime') ~= 0 and
+        GetServerVariable(zxi.mobHelpers.getRespawnVarName('Ereshkigal', xarcabardId.mob.ERESHKIGAL)) > GetSystemTime()
+    then
+        return
     end
 
-    return false
-end
+    super(mob)
+end)
 
---- When NQ despawns it either pops HQ or schedules its own respawn.
---- When HQ despawns it resets back to NQ for the next cycle.
-local function handleBeastmenDespawn(mob, config)
+----------------------------------- BEASTMEN NQ/HQ HNM LOGIC -----------------------------------
+
+--- LSB's NQ despawn already rolls NQ or HQ: it raises the [PH] kill count when the NQ comes back
+--- and leaves it alone when it schedules the HQ. The module follows that one roll and only replaces
+--- the timer of the NM LSB picked. When HQ despawns LSB resets back to NQ for the next cycle.
+local function handleBeastmenDespawn(mob, config, killsBefore)
     local ID = zones[xi.zone[config.zoneId]]
 
     if mob and ID then
         local mobId = mob:getID()
         local nqId  = ID.mob[config.nqIdName]
         local hqId  = nqId + config.hqOffset
-        local calcRespawnTime = function()
-            return math.random(0, 6) * (config.respawnWindowLengthDuration * 60) + (config.respawnHours * 3600)
-        end
+        local respawn = windowedRespawn(config.respawnHours, config.respawnWindowLengthDuration)
 
         if mobId == nqId then
-            -- PH logic: count kills, decide whether to pop HQ or repop NQ
-            local lastPop = GetServerVariable(config.popVar)
-            local kills = GetServerVariable(config.phVar) + 1
-            local popNow = kills >= 7 or (kills >= 2 and math.random(1, 100) <= 20)
-            if
-                GetSystemTime() > lastPop and
-                popNow
-            then
-                setAndPersistRespawnTime(GetMobByID(hqId),
-                    calcRespawnTime()
-                )
+            if GetServerVariable(config.phVar) ~= killsBefore then
+                setAndPersistRespawnTime(GetMobByID(nqId), respawn)
             else
-                setAndPersistRespawnTime(GetMobByID(nqId),
-                    calcRespawnTime()
-                )
+                setAndPersistRespawnTime(GetMobByID(hqId), respawn)
             end
         elseif mobId == hqId then
-            setAndPersistRespawnTime(GetMobByID(nqId),
-                calcRespawnTime()
-            )
+            setAndPersistRespawnTime(GetMobByID(nqId), respawn)
         end
     end
 end
@@ -275,13 +314,20 @@ for _, config in pairs(beastmenNMs) do
 
         local nqId = ID.mob[config.nqIdName]
         local hqId = nqId + config.hqOffset
-        local currentTime = GetSystemTime()
-        -- first attempt NQ, then HQ; if neither has a saved respawn, roll a new NQ time
-        if
-            not processNqHqSpawn(nqId, hqId, config.nqName, currentTime) and
-            not processNqHqSpawn(hqId, nqId, config.hqName, currentTime)
-        then
-            restoreOrSetRespawnTime(nqId, math.random(0, 6) * (5 * 60) + (21 * 3600))
+        local nqSaved = GetServerVariable(zxi.mobHelpers.getRespawnVarName(config.nqName, nqId))
+        local hqSaved = GetServerVariable(zxi.mobHelpers.getRespawnVarName(config.hqName, hqId))
+        local respawn = windowedRespawn(config.respawnHours, config.respawnWindowLengthDuration)
+
+        -- Whichever of the two was scheduled last is the one that comes next; the other one's
+        -- saved time is left over from an earlier cycle. With nothing saved, the NQ comes next.
+        if hqSaved > nqSaved then
+            DisallowRespawn(nqId, true)
+            DisallowRespawn(hqId, false)
+            restoreOrSetRespawnTime(hqId, respawn)
+        else
+            DisallowRespawn(hqId, true)
+            DisallowRespawn(nqId, false)
+            restoreOrSetRespawnTime(nqId, respawn)
         end
     end)
 
@@ -290,8 +336,10 @@ for _, config in pairs(beastmenNMs) do
         m:addOverride(
             fmt('xi.zones.{}.mobs.{}.onMobDespawn', config.zone, phase),
             function(mob)
+                local killsBefore = GetServerVariable(config.phVar)
+
                 super(mob)
-                handleBeastmenDespawn(mob, config)
+                handleBeastmenDespawn(mob, config, killsBefore)
             end
         )
     end
@@ -321,13 +369,13 @@ local function applyArgusLK(choice, restoreOnly)
 
     DisallowRespawn(other, true)
     DisallowRespawn(choice, false)
-    local spawnTime = math.random(0, 6) * (5 * 60) + (21 * 3600) -- 21 hours, 5 minute windows
+    SetServerVariable('[NextSpawn]Argus/LK', choice)
+    local spawnTime = windowedRespawn(21, 5)
 
     if restoreOnly then
         restoreOrSetRespawnTime(choice, spawnTime)
     else
         setAndPersistRespawnTime(GetMobByID(choice), spawnTime)
-        SetServerVariable('[NextSpawn]Argus/LK', choice)
     end
 end
 
@@ -366,14 +414,18 @@ m:addOverride('xi.zones.Riverne-Site_A01.Zone.onInitialize',
 function(zone)
     super(zone)
     -- passing in respawn time calculation in case no server value for next respawn can be found
-    restoreGroup(riverneSiteA01Id.mob.CARMINE_DOBSONFLY_OFFSET, 10, math.random(0, 6) * (5 * 60) + (21 * 3600))
+    restoreGroup(riverneSiteA01Id.mob.CARMINE_DOBSONFLY_OFFSET, 10, windowedRespawn(21, 5))
 end)
 
 m:addOverride('xi.zones.Riverne-Site_A01.mobs.Carmine_Dobsonfly.onMobDespawn',
 function(mob)
+    if isRestoreDespawn(mob) then
+        return
+    end
+
     super(mob)
 
-    local respawnTime = math.random(0, 6) * (5 * 60) + (21 * 3600) -- 21 hours, 5 minute windows
+    local respawnTime = windowedRespawn(21, 5)
     -- Check if all flies are dead and a new respawn time was set
     -- If yes, set respawn time for all Carmine Dobsonflies to 21 hours, with 5 minute windows
     for i = riverneSiteA01Id.mob.CARMINE_DOBSONFLY_OFFSET, riverneSiteA01Id.mob.CARMINE_DOBSONFLY_OFFSET + 9 do
@@ -393,7 +445,7 @@ function(zone)
     super(zone)
 
     -- 10 Knight Crabs
-    restoreGroup(jugnerForestId.mob.KING_ARTHRO - 10, 10, math.random(0, 6) * (5 * 60) + (21 * 3600))
+    restoreGroup(jugnerForestId.mob.KING_ARTHRO - 10, 10, windowedRespawn(21, 5))
 end)
 
 m:addOverride('xi.zones.Jugner_Forest.mobs.King_Arthro.onMobDespawn',
@@ -401,7 +453,7 @@ function(mob)
     super(mob)
 
     local kingArthroID = jugnerForestId.mob.KING_ARTHRO
-    local respawnTime = math.random(0, 6) * (5 * 60) + (21 * 3600) -- 21 hours, 5 minute windows
+    local respawnTime = windowedRespawn(21, 5)
     for offset = 1, 10 do
         -- setAndPersistRespawnTime takes a duration, not a timestamp
         setAndPersistRespawnTime(GetMobByID(kingArthroID - offset), respawnTime)
@@ -413,11 +465,15 @@ m:addOverride('xi.zones.Batallia_Downs.Zone.onInitialize',
 function(zone)
     super(zone)
     local mob = zone:queryEntitiesByName('Weeping_Willow')[1]
-    restoreOrSetRespawnTime(mob:getID(), math.random(0, 6) * (5 * 60) + (21 * 3600))
+    restoreOrSetRespawnTime(mob:getID(), windowedRespawn(21, 5))
 end)
 
 m:addOverride('xi.zones.Batallia_Downs.mobs.Weeping_Willow.onMobDespawn',
 function(mob)
+    if isRestoreDespawn(mob) then
+        return
+    end
+
     super(mob)
     -- Disable respawning logic until Lumber Jack is killed/despawns
     DisallowRespawn(mob:getID(), true)
@@ -427,11 +483,11 @@ m:addOverride('xi.zones.Batallia_Downs.mobs.Lumber_Jack.onMobDespawn',
 function(mob)
     super(mob)
 
-    local willow = mob:getID() -6
+    local willow = mob:getID() - 6
     DisallowRespawn(willow, false) -- Allow Weeping Willow to respawn
-    if mob:getLocalVar('death') then
+    if mob:getLocalVar('death') == 1 then
         -- Lumber Jack died, Set Weeping Willow's respawn time (21 hours, 5 minute windows)
-        setAndPersistRespawnTime(GetMobByID(willow), math.random(0, 6) * (5 * 60) + (21 * 3600)) -- 21 hours 5 minute windows
+        setAndPersistRespawnTime(GetMobByID(willow), windowedRespawn(21, 5))
     else
         -- Lumber Jack despawned without dying, reset Weeping Willow's respawn time to 30 minutes
         setAndPersistRespawnTime(GetMobByID(willow), 1800) -- 30 minutes
@@ -439,44 +495,62 @@ function(mob)
 end)
 
 ----------------------------------- Cherry Saplings/Cemetery Cherry Logic -----------------------------------
+-- LSB respawns the saplings only through Cemetery Cherry's timer: 30-60 minutes after zone load or
+-- after it despawns unkilled, 60-72 hours after it is killed. The module replaces only the
+-- killed timer with 71 hours + 0-6 windows of 10 minutes on the saplings themselves.
 local kingRanperresTombId = zones[xi.zone.KING_RANPERRES_TOMB]
+local cemeteryCherryId    = kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 6
+
+local function forEachCherrySapling(func)
+    for i = kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET, kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 8 do
+        local sapling = GetMobByID(i)
+
+        if i ~= cemeteryCherryId and sapling then -- Skip Cemetery Cherry
+            func(sapling)
+        end
+    end
+end
 
 m:addOverride('xi.zones.King_Ranperres_Tomb.Zone.onInitialize',
 function(zone)
     super(zone)
-    -- 8 saplings, skip the cemetery cherry at offset 6
-    restoreGroup(kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET, 9, math.random(0, 6) * (5 * 60) + (21 * 3600), 6)
+
+    -- Restore a saved sapling respawn, and drop the 30-60 minute timer Cemetery Cherry's onMobInitialize started
+    local currentTime    = GetSystemTime()
+    local cemeteryCherry = GetMobByID(cemeteryCherryId)
+
+    forEachCherrySapling(function(sapling)
+        local savedRespawnTime = GetServerVariable(zxi.mobHelpers.getRespawnVarName(sapling))
+
+        if savedRespawnTime > currentTime then
+            if cemeteryCherry then
+                cemeteryCherry:clearTimerQueue()
+            end
+
+            sapling:setRespawnTime(savedRespawnTime - currentTime)
+        end
+    end)
 end)
 
--- Add sapling despawn logic to check if all are dead
+-- Saplings never respawn one by one: they come back together through Cemetery Cherry
 m:addOverride('xi.zones.King_Ranperres_Tomb.mobs.Cherry_Sapling.onMobDeath',
-function(mob)
-    super(mob)
-    local cemeteryCherry = GetMobByID(kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 6) -- Cemetery Cherry
-
-    -- If Cemetery Cherry is alive, disallow respawn for all saplings.
-    if cemeteryCherry:isAlive() then
-        for i = kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET, kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 8 do
-            if i ~= kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 6 then -- Skip Cemetery Cherry
-                DisallowRespawn(i, true)
-            end
-        end
-    end
+function(mob, player, optParams)
+    super(mob, player, optParams)
+    DisallowRespawn(mob:getID(), true)
 end)
 
 m:addOverride('xi.zones.King_Ranperres_Tomb.mobs.Cemetery_Cherry.onMobDespawn',
 function(mob)
     super(mob)
-    for i = kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET, kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 8 do
-        if i ~= kingRanperresTombId.mob.CHERRY_SAPLING_OFFSET + 6 then -- Skip Cemetery Cherry
-            local sapling = GetMobByID(i)
-            DisallowRespawn(i, false)
-            if mob:getLocalVar('wasKilled') == 1 then
-                setAndPersistRespawnTime(sapling, math.random(0, 6) * (10 * 60) + (71 * 3600)) -- 71 hours, 10 minute windows
-            else
-                setAndPersistRespawnTime(sapling, sapling:getRespawnTime())
-            end
-        end
+
+    if mob:getLocalVar('wasKilled') == 1 then
+        -- Replace LSB's 60-72 hour sapling timer with the window
+        mob:clearTimerQueue()
+
+        local respawnTime = windowedRespawn(71, 10)
+        forEachCherrySapling(function(sapling)
+            setAndPersistRespawnTime(sapling, respawnTime)
+        end)
     end
 end)
 
@@ -486,7 +560,7 @@ local lufaiseMeadowsId = zones[xi.zone.LUFAISE_MEADOWS]
 m:addOverride('xi.zones.Lufaise_Meadows.Zone.onInitialize',
 function(zone)
     super(zone)
-    local respawnTime = math.random(0, 6) * (5 * 60) + (21 * 3600)
+    local respawnTime = windowedRespawn(21, 5)
     for _, v in pairs(lufaiseMeadowsId.mob.PADFOOT) do
         local padfoot = GetMobByID(v)
         if padfoot then
@@ -497,13 +571,17 @@ end)
 
 m:addOverride('xi.zones.Lufaise_Meadows.mobs.Padfoot.onMobDespawn',
 function(mob)
+    if isRestoreDespawn(mob) then
+        return
+    end
+
     -- The base script re-rolls realPadfoot at the end of onMobDespawn, so read it before super
     local isRealPadfoot = mob:getID() == lufaiseMeadowsId.mob.PADFOOT[GetServerVariable('realPadfoot')]
 
     super(mob)
 
     if isRealPadfoot then
-        local respawn = math.random(0, 6) * (5 * 60) + (21 * 3600) -- 21 hours, 5 minute windows
+        local respawn = windowedRespawn(21, 5)
 
         for _, v in pairs(lufaiseMeadowsId.mob.PADFOOT) do
             setAndPersistRespawnTime(GetMobByID(v), respawn)

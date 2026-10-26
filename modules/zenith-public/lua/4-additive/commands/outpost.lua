@@ -50,7 +50,7 @@ local outpostRegions =
     aragoneu          = xi.region.ARAGONEU,
     fauregandi        = xi.region.FAUREGANDI,
     valdeaunia        = xi.region.VALDEAUNIA,
-    qufim             = xi.region.QUFIMISLAND,
+    qufim             = xi.region.QUFIM_ISLAND,
     litelor           = xi.region.LITELOR,
     kuzotz            = xi.region.KUZOTZ,
     vollbow           = xi.region.VOLLBOW,
@@ -58,7 +58,7 @@ local outpostRegions =
     elshimo_uplands   = xi.region.ELSHIMO_UPLANDS,
     tulia             = xi.region.TULIA,
     movalpolos        = xi.region.MOVALPOLOS,
-    tavnazia          = xi.region.TAVNAZIANARCH,
+    tavnazia          = xi.region.TAVNAZIAN_ARCHIPELAGO,
 }
 
 local nationTeleports =
