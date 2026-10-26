@@ -14,7 +14,7 @@ describe('Zenith Ghatsad frames', function()
     local valoredge = { xi.item.BRASS_SHEET, xi.item.WAMOURA_COCOON, xi.item.CHUNK_OF_IMPERIAL_CERMET }
     local sharpshot = { xi.item.PIECE_OF_ROSEWOOD_LUMBER, xi.item.SQUARE_OF_KARAKUL_CLOTH, xi.item.SQUARE_OF_KARAKUL_LEATHER }
 
-    local function trade(status, items, last, eventId)
+    local function tradeMaterials(status, items, last, eventId)
         player:setCharVar('PUP_AttachmentStatus', status)
 
         local offer = {}
@@ -51,25 +51,25 @@ describe('Zenith Ghatsad frames', function()
     end)
 
     it('takes Tigerfangs for Valoredge', function()
-        trade(2, valoredge, xi.item.TIGERFANGS, 624)
+        tradeMaterials(2, valoredge, xi.item.TIGERFANGS, 624)
 
         assert(player:getCharVar('PUP_AttachmentStatus') == 5, 'the Valoredge materials were not accepted')
     end)
 
     it('refuses Patas for Valoredge', function()
-        trade(2, valoredge, xi.item.PATAS)
+        tradeMaterials(2, valoredge, xi.item.PATAS)
 
         assert(player:getCharVar('PUP_AttachmentStatus') == 2, 'Patas were accepted')
     end)
 
     it('takes a Repeating Crossbow for Sharpshot', function()
-        trade(3, sharpshot, xi.item.REPEATING_CROSSBOW, 624)
+        tradeMaterials(3, sharpshot, xi.item.REPEATING_CROSSBOW, 624)
 
         assert(player:getCharVar('PUP_AttachmentStatus') == 6, 'the Sharpshot materials were not accepted')
     end)
 
     it('refuses a Heavy Crossbow for Sharpshot', function()
-        trade(3, sharpshot, xi.item.HEAVY_CROSSBOW)
+        tradeMaterials(3, sharpshot, xi.item.HEAVY_CROSSBOW)
 
         assert(player:getCharVar('PUP_AttachmentStatus') == 3, 'the Heavy Crossbow was accepted')
     end)
