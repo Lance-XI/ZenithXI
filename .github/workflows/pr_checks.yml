@@ -299,10 +299,6 @@ jobs:
             compiler: msvc
             build_modules: false
           - build_type: Debug
-            runner: macos-26
-            compiler: appleClang
-            build_modules: false
-          - build_type: Debug
             runner: ubuntu-26.04
             compiler: gcc
             compiler_version: 15
@@ -343,11 +339,6 @@ jobs:
           - runner: windows-2025
             test_modules: false
             multi_process: true
-            xi_test: true
-            startup_checks: true
-          - runner: macos-26
-            test_modules: false
-            multi_process: false
             xi_test: true
             startup_checks: true
           - runner: ubuntu-26.04

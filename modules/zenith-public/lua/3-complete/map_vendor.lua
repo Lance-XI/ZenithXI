@@ -2,50 +2,48 @@
 -- Map Vendor Module
 --
 -- This module overrides the default behaviour of map vendors.
+-- A vendor only shows, and only sells, maps that are for sale in its region and that the
+-- player does not own yet. Purchases are checked again on the server, so a crafted event
+-- update cannot buy a hidden map.
 -- -----------------------------------
 
 require('modules/module_utils')
 
-local m = Module:new('map_vendor')
+local m = Module:new('c_map_vendor')
+
+-- True when the region is in the map entry's list of regions that sell it
+local function isSoldInRegion(mapEntry, region)
+    if mapEntry[3] == nil then
+        return false
+    end
+
+    for _, soldRegion in ipairs(mapEntry[3]) do
+        if soldRegion == region then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- True when this vendor offers the map to the player: it exists, is for sale (cost above 0),
+-- is sold in the vendor's region and the player does not already have its key item.
+local function isMapOffered(player, mapEntry, region)
+    return mapEntry ~= nil and
+        mapEntry[2] > 0 and
+        isSoldInRegion(mapEntry, region) and
+        not player:hasKeyItem(mapEntry[1])
+end
 
 local function getMapEventParams(player)
     local paramTable = { 0, 0, 0 }
     local currentRegion = player:getZone():getRegionID()
 
     for mapId = 0, #xi.maps.mapInfo do
-        local mapEntry = xi.maps.mapInfo[mapId]
         local paramPos = math.floor((mapId) / 32) + 1
-        local displayMap = true
 
-        -- Remove all maps that should not be sold
-        if mapEntry[2] == -1 then
-            displayMap = false
-
-        -- Check if the player has the key item for this map
-        -- remove from the vendor if player already has it
-        elseif player:hasKeyItem(mapEntry[1]) then
-            displayMap = false
-
-        -- Check if the current region is allowed to sell this map
-        else
-            local regionAllowed = false
-            if mapEntry[3] ~= nil then
-                -- If the map entry has a region list, check if the current region is in that list
-                for _, region in ipairs(mapEntry[3]) do
-                    if region == currentRegion then
-                        regionAllowed = true
-                        break
-                    end
-                end
-            end
-
-            -- If the region is not allowed, remove from the vendor
-            if not regionAllowed then
-                displayMap = false
-            end
-        end
-
-        if not displayMap then
+        -- A set bit hides the map from the vendor menu
+        if not isMapOffered(player, xi.maps.mapInfo[mapId], currentRegion) then
             paramTable[paramPos] = bit.bor(paramTable[paramPos], bit.lshift(1, mapId))
         end
     end
@@ -66,18 +64,18 @@ m:addOverride('xi.maps.onEventUpdate', function(player, csid, option, npc)
 
     local mapId = bit.rshift(option, 16)
 
-    if
-        mapId >= 0 and
-        mapId <= #xi.maps.mapInfo and
-        bit.band(option, 0xF) == 1
-    then
-        local mapCost = xi.maps.mapInfo[mapId][2]
+    if bit.band(option, 0xF) == 1 then
+        local mapEntry = xi.maps.mapInfo[mapId]
 
-        if mapCost <= player:getGil() then
-            player:delGil(mapCost)
-            npcUtil.giveKeyItem(player, xi.maps.mapInfo[mapId][1])
-        else
-            player:messageSpecial(zones[player:getZoneID()].text.NOT_HAVE_ENOUGH_GIL)
+        -- Anything the menu would not offer is ignored: no gil taken, no key item given
+        if isMapOffered(player, mapEntry, player:getZone():getRegionID()) then
+            local mapCost = mapEntry[2]
+
+            if player:getGil() < mapCost then
+                player:messageSpecial(zones[player:getZoneID()].text.NOT_HAVE_ENOUGH_GIL)
+            elseif player:delGil(mapCost) then
+                npcUtil.giveKeyItem(player, mapEntry[1])
+            end
         end
     end
 

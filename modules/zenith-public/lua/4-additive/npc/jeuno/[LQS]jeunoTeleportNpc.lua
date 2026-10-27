@@ -30,9 +30,9 @@ LQS.npc(m, {
                 -- teleportDelay  = 1250
                 -- animation      = { actionID = 6, animID = 600 }
                 -- outpostOverrides = {
-                -- [xi.region.RONFAURE]    = { gil = 500, cp = 50 },  -- pricier
-                -- [xi.region.QUFIMISLAND] = { gil = 0,   cp = 0  },  -- free
-                -- [xi.region.VOLLBOW]     = { gil = 250, level = 40 }, -- cheaper + lower level req
+                -- [xi.region.RONFAURE]     = { gil = 500, cp = 50 },  -- pricier
+                -- [xi.region.QUFIM_ISLAND] = { gil = 0,   cp = 0  },  -- free
+                -- [xi.region.VOLLBOW]      = { gil = 250, level = 40 }, -- cheaper + lower level req
                 --},
             }),
         },

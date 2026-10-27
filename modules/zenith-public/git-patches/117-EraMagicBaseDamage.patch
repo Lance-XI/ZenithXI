@@ -1,0 +1,75 @@
+diff --git a/scripts/globals/spells/damage_spell.lua b/scripts/globals/spells/damage_spell.lua
+index d43562d683..796d43bb31 100644
+--- a/scripts/globals/spells/damage_spell.lua
++++ b/scripts/globals/spells/damage_spell.lua
+@@ -337,33 +337,52 @@ xi.spells.damage.calculateBaseDamage = function(caster, target, spellId, spellGr
+     -----------------------------------
+     -- STEP 1: baseSpellDamage (V)
+     -----------------------------------
++    -- Zenith: players keep the era V (vNPC), not the 2013 vPC.
+     local baseSpellDamage = xi.spells.damage.pTable[spellId][column.NPC_POWER] -- (V) In Wiki.
+ 
+-    if useNewSystem then
+-        baseSpellDamage = xi.spells.damage.pTable[spellId][column.PC_POWER] -- vPC
+-    end
+-
+     -----------------------------------
+     -- STEP 2: statDiffBonus (statDiff * M)
+     -----------------------------------
+     local statDiffBonus = 0 -- statDiff x appropriate multipliers.
+     local statDiff      = caster:getStat(statUsed) - target:getStat(statUsed)
+ 
+-    -- New System
++    -- Zenith: era dINT (old M/I curve) plus 25% of whatever the 2013 segmented curve adds on top.
++    -- A negative dINT keeps the old penalty instead of the new system's clamp to 0.
+     if useNewSystem then
+-        local mTable =
+-        {
+-            [1] = {   0,  50 },
+-            [2] = {  50,  50 },
+-            [3] = { 100, 100 },
+-            [4] = { 200, 100 },
+-            [5] = { 300, 100 },
+-            [6] = { 400, 100 },
+-            [7] = { 500, 100 },
+-        }
+-
+-        for i = 1, 7 do
+-            statDiffBonus = statDiffBonus + math.floor(utils.clamp(statDiff - mTable[i][1], 0, mTable[i][2]) * xi.spells.damage.pTable[spellId][column.INFLEXION_POINT + i])
++        local spellMultiplier = xi.spells.damage.pTable[spellId][column.NPC_MULTIPLIER]  -- M
++        local inflexionPoint  = xi.spells.damage.pTable[spellId][column.INFLEXION_POINT] -- I
++
++        if statDiff <= 0 then
++            statDiffBonus = statDiff
++        else
++            -- Old result: same as the old system below.
++            local oldStatDiff = math.min(statDiff, 3 * inflexionPoint)
++            local oldResult   = 0
++
++            if oldStatDiff <= inflexionPoint then
++                oldResult = math.floor(oldStatDiff * spellMultiplier)
++            else
++                oldResult = math.floor(inflexionPoint * spellMultiplier) + math.floor((oldStatDiff - inflexionPoint) * spellMultiplier / 2)
++            end
++
++            -- Modern result: the segmented M0/M50/... curve.
++            local modernResult = 0
++            local mTable =
++            {
++                [1] = {   0,  50 },
++                [2] = {  50,  50 },
++                [3] = { 100, 100 },
++                [4] = { 200, 100 },
++                [5] = { 300, 100 },
++                [6] = { 400, 100 },
++                [7] = { 500, 100 },
++            }
++
++            for i = 1, 7 do
++                modernResult = modernResult + math.floor(utils.clamp(statDiff - mTable[i][1], 0, mTable[i][2]) * xi.spells.damage.pTable[spellId][column.INFLEXION_POINT + i])
++            end
++
++            statDiffBonus = oldResult + math.floor(math.max(0, modernResult - oldResult) * 0.25)
+         end
+ 
+     -- Old system

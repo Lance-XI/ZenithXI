@@ -36,6 +36,17 @@ local function hasSatchelUnlocked(player)
     return player:getContainerSize(xi.inv.MOGSATCHEL) > 0
 end
 
+-- Play Bagotrix's answer to a menu choice.
+-- The greeting opens the menu as its last row, but LQS.event keeps [LQS]BLOCKING set for 3 s
+-- after that row and drops any dialog started while it is set, so a player who answered quickly
+-- got no reply at all (not even the "not enough gil" one). Once the menu is answered the greeting
+-- is over, so release the lock before replying. LQS's own release timer still runs later and
+-- only resets the NPC's facing.
+local function reply(player, event)
+    player:setLocalVar('[LQS]BLOCKING', 0)
+    LQS.event(player, nil, event)
+end
+
 -- Process the satchel purchase
 -- Uses npcName string instead of npc object to avoid stale C++ pointers in callbacks
 local function processPurchase(player, npcName)
@@ -43,7 +54,7 @@ local function processPurchase(player, npcName)
 
     -- Check if player has enough gil
     if player:getGil() < price then
-        LQS.event(player, nil, {
+        reply(player, {
             'Bagotrix: Bah! Uplander pockets empty!',
             string.format(' Need %s gil! You no have enough!', price),
             ' Come back when have proper gil!',
@@ -57,7 +68,7 @@ local function processPurchase(player, npcName)
     player:changeContainerSize(xi.inv.MOGSATCHEL, 80)
 
     -- Success dialog using LQS.event for proper sequencing
-    LQS.event(player, nil, {
+    reply(player, {
         'Bagotrix: Ahhh! Good business with uplander!',
         ' Here! Satchel now big and full!',
         string.format(' You paid %s gil! Very good!', price),
@@ -79,7 +90,7 @@ local function showPurchaseMenu(player, npcName)
             {
                 'No thanks',
                 function(playerMenuArg)
-                    LQS.event(playerMenuArg, nil, {
+                    reply(playerMenuArg, {
                         'Bagotrix: Hmph! Uplander no want good deal?',
                         ' Bagotrix wait here if you change mind!',
                         ' Come back when pockets heavy with gil!',

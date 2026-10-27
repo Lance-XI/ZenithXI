@@ -40,22 +40,8 @@ local effectAdjustments =
             subpower = 0.50, -- 50% reduction
         },
     },
-    dodge =
-    {
-        effectId = xi.effect.DODGE,
-        set =
-        {
-            duration = 90000, -- Changed to 90 seconds
-        },
-    },
-    focus =
-    {
-        effectId = xi.effect.FOCUS,
-        set =
-        {
-            duration = 90000, -- Changed to 90 seconds
-        },
-    },
+    -- Dodge and Focus (90 seconds) are in 4-additive/jobAbilities/focusDodgeChanges.lua, which
+    -- replaces their onEffectGain; an entry here would never run.
     sepulcher =
     {
         effectId = xi.effect.SEPULCHER,
@@ -132,6 +118,15 @@ local effectAdjustments =
         add =
         {
             duration = 15000, -- Changed from 30s to 45s
+        },
+    },
+    -- Scholar
+    tabula_rasa =
+    {
+        effectId = xi.effect.TABULA_RASA,
+        add =
+        {
+            duration = -120000, -- Reverted from 180s to original 60s
         },
     },
     -- Puppetmaster

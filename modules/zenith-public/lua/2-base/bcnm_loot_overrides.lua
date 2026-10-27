@@ -12,9 +12,12 @@
 -- 1. Find the battlefield ID you want to modify in scripts/globals/battlefield.lua
 --    Example: xi.battlefield.id.CHARMING_TRIO, xi.battlefield.id.DOUBLE_DRAGONIAN
 --
--- 2. Add an entry to the lootOverrides table below using the battlefield ID as the key
+-- 2. To change only a few drop rates, add an entry to the lootAdjustments table below
+--    (see its comments). It edits LSB's own table, so later LSB loot changes still apply.
+--    To replace a battlefield's whole table, add an entry to lootOverrides instead,
+--    using the battlefield ID as the key.
 --
--- 3. Define your loot table using the format described below
+-- 3. Define a full replacement table using the format described below
 --
 -- 4. Restart the server for changes to take effect
 --
@@ -160,129 +163,149 @@ require('modules/module_utils')
 local m = Module:new('b_bcnm_loot_overrides')
 
 -----------------------------------
--- LOOT OVERRIDE CONFIGURATION
+-- LOOT ADJUSTMENTS (targeted edits to LSB's table)
 -----------------------------------
--- Add your battlefield loot overrides below.
--- Use the battlefield ID as the key and a complete loot table as the value.
--- See examples in the header comments for guidance.
+-- Lowers the drop rate of single items inside LSB's current loot table and gives the
+-- weight taken away to other items in the same group. Everything else in LSB's table
+-- (new items, removed items, re-weighting) still reaches the crate.
+--
+--   group  = an item only the target loot group holds, used to find that group
+--   itemId = the item whose drop rate changes
+--   share  = its new share of the group (0.25 = 25%); a rate is only ever lowered
+--   giveTo = items in the same group that split the weight taken away
+--
+-- The group's total weight does not change. An adjustment whose group or items are no
+-- longer in LSB's table is skipped with a warning at server start.
 -----------------------------------
 
-local lootOverrides =
+local lootAdjustments =
 {
     -----------------------------------
     -- Under Observation (BCNM40, Horlais Peak)
-    -- Reduced Utsusemi: Ni drop rate (originally 5% in group 4, 20% in group 5) - Now 2.5% in group 4, 10% in group 5
-    -- Reduced Phalanx and Erase (originally both 20% in group 6) - Now 10%
+    -- Utsusemi: Ni 20% -> 10% (scroll group), Erase and Phalanx 20% -> 10% each,
+    -- Tilt Belt and Mantra Belt 40% -> 25% each. The weight taken away goes to junk.
+    -- LSB's mixed (Mantra Belt) group no longer holds Utsusemi: Ni, so there is nothing to cut there.
     -----------------------------------
     [xi.battlefield.id.UNDER_OBSERVATION] =
     {
-        -- Group 1: Gil
         {
-            { itemId = xi.item.GIL, weight = 1000, amount = 5000 },
+            group  = xi.item.TILT_BELT,
+            itemId = xi.item.TILT_BELT,
+            share  = 0.25,
+            giveTo = { xi.item.MYTHRIL_BEASTCOIN, xi.item.OAK_LOG },
         },
-
-        -- Group 2: Peacock Charm (rare)
         {
-            { itemId = xi.item.NONE,          weight = 900 },
-            { itemId = xi.item.PEACOCK_CHARM, weight = 100 },
+            group  = xi.item.MANTRA_BELT,
+            itemId = xi.item.MANTRA_BELT,
+            share  = 0.25,
+            giveTo = { xi.item.MYTHRIL_BEASTCOIN, xi.item.OAK_LOG },
         },
-
-        -- Group 3: Weapons and Tilt Belt
-        -- REDUCED Tilt Belt (was 300, now 250)
         {
-            { itemId = xi.item.BEHOURD_LANCE,     weight =  50 },
-            { itemId = xi.item.MUTILATOR,         weight =  50 },
-            { itemId = xi.item.RAIFU,             weight =  50 },
-            { itemId = xi.item.TILT_BELT,         weight = 250 },
-            { itemId = xi.item.TOURNEY_PATAS,     weight =  50 },
-            { itemId = xi.item.BLACK_ROCK,        weight =  25 },
-            { itemId = xi.item.BLUE_ROCK,         weight =  25 },
-            { itemId = xi.item.GREEN_ROCK,        weight =  25 },
-            { itemId = xi.item.PURPLE_ROCK,       weight =  25 },
-            { itemId = xi.item.RED_ROCK,          weight =  25 },
-            { itemId = xi.item.TRANSLUCENT_ROCK,  weight =  25 },
-            { itemId = xi.item.WHITE_ROCK,        weight =  25 },
-            { itemId = xi.item.YELLOW_ROCK,       weight =  25 },
-            { itemId = xi.item.AMETRINE,          weight =  25 },
-            { itemId = xi.item.BLACK_PEARL,       weight =  25 },
-            { itemId = xi.item.GARNET,            weight =  25 },
-            { itemId = xi.item.GOSHENITE,         weight =  25 },
-            { itemId = xi.item.PEARL,             weight =  25 },
-            { itemId = xi.item.PERIDOT,           weight =  25 },
-            { itemId = xi.item.SPHENE,            weight =  25 },
-            { itemId = xi.item.TURQUOISE,         weight =  25 },
-            { itemId = xi.item.MYTHRIL_BEASTCOIN, weight =  50 },
-            { itemId = xi.item.OAK_LOG,           weight =  50 },
-            { itemId = xi.item.SCROLL_OF_REFRESH, weight =  50 },
+            group  = xi.item.SCROLL_OF_ICE_SPIKES,
+            itemId = xi.item.SCROLL_OF_UTSUSEMI_NI,
+            share  = 0.10,
+            giveTo = { xi.item.GOLD_BEASTCOIN },
         },
-
-        -- Group 4: Mixed drops
-        -- REDUCED Utsusemi: Ni (was 50, now 25)
-        -- REDUCED Mantra Belt (was 300, now 250)
         {
-            { itemId = xi.item.BUZZARD_TUCK,          weight =  50 },
-            { itemId = xi.item.DE_SAINTRES_AXE,       weight =  50 },
-            { itemId = xi.item.GRUDGE_SWORD,          weight =  50 },
-            { itemId = xi.item.MANTRA_BELT,           weight = 250 },
-            { itemId = xi.item.BLACK_ROCK,            weight =  25 },
-            { itemId = xi.item.BLUE_ROCK,             weight =  25 },
-            { itemId = xi.item.GREEN_ROCK,            weight =  25 },
-            { itemId = xi.item.PURPLE_ROCK,           weight =  25 },
-            { itemId = xi.item.RED_ROCK,              weight =  25 },
-            { itemId = xi.item.TRANSLUCENT_ROCK,      weight =  25 },
-            { itemId = xi.item.WHITE_ROCK,            weight =  25 },
-            { itemId = xi.item.YELLOW_ROCK,           weight =  25 },
-            { itemId = xi.item.AMETRINE,              weight =  25 },
-            { itemId = xi.item.BLACK_PEARL,           weight =  25 },
-            { itemId = xi.item.GARNET,                weight =  25 },
-            { itemId = xi.item.GOSHENITE,             weight =  25 },
-            { itemId = xi.item.PEARL,                 weight =  25 },
-            { itemId = xi.item.PERIDOT,               weight =  25 },
-            { itemId = xi.item.SPHENE,                weight =  25 },
-            { itemId = xi.item.TURQUOISE,             weight =  25 },
-            { itemId = xi.item.MYTHRIL_BEASTCOIN,     weight =  50 },
-            { itemId = xi.item.OAK_LOG,               weight =  50 },
-            { itemId = xi.item.RERAISER,              weight =  50 },
-            { itemId = xi.item.VILE_ELIXIR,           weight =  25 },
-            { itemId = xi.item.SCROLL_OF_UTSUSEMI_NI, weight =  25 },
+            group  = xi.item.FIRE_SPIRIT_PACT,
+            itemId = xi.item.SCROLL_OF_ERASE,
+            share  = 0.10,
+            giveTo = { xi.item.SCROLL_OF_ABSORB_STR },
         },
-
-        -- Group 5: Scrolls
-        -- REDUCED Utsusemi: Ni (was 200, now 100)
         {
-            { itemId = xi.item.SCROLL_OF_ICE_SPIKES,  weight = 300 },
-            { itemId = xi.item.SCROLL_OF_REFRESH,     weight = 200 },
-            { itemId = xi.item.SCROLL_OF_UTSUSEMI_NI, weight = 100 },
-            { itemId = xi.item.GOLD_BEASTCOIN,        weight = 400 },
-        },
-
-        -- Group 6: Scrolls
-        -- REDUCED Erase and Phalanx (was 200, now 100)
-        {
-            { itemId = xi.item.FIRE_SPIRIT_PACT,     weight = 200 },
-            { itemId = xi.item.SCROLL_OF_ABSORB_STR, weight = 300 },
-            { itemId = xi.item.SCROLL_OF_ERASE,      weight = 100 },
-            { itemId = xi.item.SCROLL_OF_PHALANX,    weight = 100 },
-            { itemId = xi.item.BLACK_PEARL,          weight = 300 },
-        },
-
-        -- Group 7: Guaranteed Hecteyes Eye
-        {
-            { itemId = xi.item.HECTEYES_EYE, weight = 1000 },
-        },
-
-        -- Group 8: Guaranteed Vial of Mercury
-        {
-            { itemId = xi.item.VIAL_OF_MERCURY, weight = 1000 },
+            group  = xi.item.FIRE_SPIRIT_PACT,
+            itemId = xi.item.SCROLL_OF_PHALANX,
+            share  = 0.10,
+            giveTo = { xi.item.SCROLL_OF_ABSORB_STR },
         },
     },
 }
 
 -----------------------------------
+-- LOOT OVERRIDE CONFIGURATION (full replacements)
+-----------------------------------
+-- Use the battlefield ID as the key and a complete loot table as the value.
+-- A full table does not follow later LSB loot changes, so prefer lootAdjustments.
+-- See examples in the header comments for guidance.
+-----------------------------------
+
+local lootOverrides =
+{
+}
+
+-----------------------------------
+-- HELPERS
+-----------------------------------
+
+-- The entry for itemId in a loot group, or nil
+local function findEntry(group, itemId)
+    for _, entry in ipairs(group) do
+        if entry.itemId == itemId then
+            return entry
+        end
+    end
+
+    return nil
+end
+
+-- The first loot group holding itemId, or nil
+local function findGroup(lootTable, itemId)
+    for _, group in ipairs(lootTable) do
+        if findEntry(group, itemId) then
+            return group
+        end
+    end
+
+    return nil
+end
+
+local function applyAdjustment(battlefieldId, lootTable, adjustment)
+    local group = findGroup(lootTable, adjustment.group)
+    local entry = group and findEntry(group, adjustment.itemId)
+    if not entry then
+        printf('[bcnm_loot_overrides] Warning: battlefield %d has no item %d in the group holding item %d, skipping.', battlefieldId, adjustment.itemId, adjustment.group)
+        return
+    end
+
+    local receivers = {}
+    for _, itemId in ipairs(adjustment.giveTo) do
+        local receiver = findEntry(group, itemId)
+        if not receiver then
+            printf('[bcnm_loot_overrides] Warning: battlefield %d has no item %d next to item %d, skipping.', battlefieldId, itemId, adjustment.itemId)
+            return
+        end
+
+        table.insert(receivers, receiver)
+    end
+
+    local total = 0
+    for _, groupEntry in ipairs(group) do
+        total = total + groupEntry.weight
+    end
+
+    local newWeight = math.floor(total * adjustment.share + 0.5)
+    local freed     = entry.weight - newWeight
+    if freed <= 0 then
+        return
+    end
+
+    -- Split the freed weight evenly; the first receiver takes any remainder
+    entry.weight = newWeight
+    for i, receiver in ipairs(receivers) do
+        local portion = math.floor(freed / #receivers)
+        if i == 1 then
+            portion = portion + freed % #receivers
+        end
+
+        receiver.weight = receiver.weight + portion
+    end
+end
+
+-----------------------------------
 -- MODULE INITIALIZATION
 -----------------------------------
 
--- Apply loot overrides after server initialization when all battlefields are loaded
+-- Apply loot changes after server initialization when all battlefields are loaded
 m:addOverride('xi.server.onServerStart', function()
     super()
 
@@ -294,6 +317,21 @@ m:addOverride('xi.server.onServerStart', function()
             overrideCount = overrideCount + 1
         else
             printf('[bcnm_loot_overrides] Warning: Battlefield ID %d not found, skipping loot override.', battlefieldId)
+        end
+    end
+
+    -- Adjustments edit LSB's table in place. Running them again changes nothing, as each
+    -- item is already at its share and the group total is unchanged.
+    for battlefieldId, adjustments in pairs(lootAdjustments) do
+        local battlefield = xi.battlefield.contents[battlefieldId]
+        if battlefield then
+            for _, adjustment in ipairs(adjustments) do
+                applyAdjustment(battlefieldId, battlefield.loot, adjustment)
+            end
+
+            overrideCount = overrideCount + 1
+        else
+            printf('[bcnm_loot_overrides] Warning: Battlefield ID %d not found, skipping loot adjustments.', battlefieldId)
         end
     end
 

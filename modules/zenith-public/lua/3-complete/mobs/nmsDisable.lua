@@ -13,18 +13,35 @@
 -- inside the region every time, overwriting anything setSpawn() wrote. So these
 -- NMs are taken out of circulation instead of being parked at the origin.
 --
--- What this module does, and does not do:
---   * Normal-spawn NMs (marked "auto-respawn" below) are fully disabled:
---     setRespawnTime(0) clears m_AllowRespawn and unregisters them from the
---     zone's SpawnHandler, and the live instance is despawned.
---   * Lottery and scripted NMs are NOT reliably disabled. Their placeholders
---     call SpawnMob(), which runs CMobEntity::Spawn() directly and ignores
---     m_AllowRespawn. They are listed here so the set stays in one place, but
---     the only airtight fix is to drop `template:` from their spawn entries in
---     data/zones/<zone>/mobs.yaml -- which is base data, so it needs a git
---     patch. The exact spawn ids are in the retired SQL file's migration note.
+-- How it works, per listed mob, from Zone.onInitialize (which runs after the
+-- zone's first spawn pass):
+--   * Respawn is switched off. Every automatic spawn path checks the mob's
+--     m_AllowRespawn first: SpawnHandler respawns and spawn-slot ("lottery")
+--     rolls both go through SpawnHandler::canSpawnNow.
+--       - A mob outside a spawn slot gets setRespawnTime(0), which also clears
+--         its pending respawn in the SpawnHandler.
+--       - A spawn-slot NM (the lottery NMs, data/zones/<zone>/mobs.yaml
+--         `slots:`) gets DisallowRespawn(id, true) instead. setRespawnTime(0)
+--         would erase the whole slot's pending respawn, which the placeholder
+--         shares, and the placeholders must keep popping.
+--   * A DESPAWN listener does that again after every despawn. Most of these
+--     NMs re-arm their own timer in onMobDespawn (setRespawnTime(7200) and
+--     the like), and CMobEntity::OnDespawn calls the DESPAWN listeners right
+--     after onMobDespawn, so the listener has the last word. Despawning first
+--     and disabling afterwards would not be enough: DespawnMob only starts the
+--     despawn, and onMobDespawn runs about 3 seconds later.
+--   * The instance that is up at boot is despawned.
 --
--- 'Becut' was dropped: it no longer exists in any zone's mobs.yaml.
+-- A GM can still pop one with !spawnmob: SpawnMob() calls CMobEntity::Spawn()
+-- directly and does not look at m_AllowRespawn. Once it dies or is despawned
+-- the listener switches respawn off again, so it does not come back.
+--
+-- Not covered: a script that calls setRespawnTime(n) on one of these mobs
+-- while it is down would re-arm it. Nothing in LSB or zenith-public does that
+-- for any mob listed here (checked 2026-10-26).
+--
+-- 'Becut' was dropped: its mobs.yaml spawn entry has no `template:`, so the
+-- engine only reserves its id and never creates the mob.
 --
 -- Public module for ZenithXI
 -----------------------------------
@@ -165,12 +182,21 @@ local disabledNMs =
     },
 }
 
+local function disableRespawn(mob)
+    if #mob:getSpawnSlotMobs() > 0 then
+        DisallowRespawn(mob:getID(), true)
+    else
+        mob:setRespawnTime(0)
+    end
+end
+
 local function disableZoneNMs(zone, names)
     for _, mob in ipairs(zone:getMobs()) do
         if names[mob:getName()] then
-            -- Order matters: a despawn re-registers the mob with the SpawnHandler
-            -- while m_AllowRespawn is still set, so clear it first.
-            mob:setRespawnTime(0)
+            -- Before the despawn below: CDespawnState registers the mob for
+            -- respawn on entry if respawn is still allowed.
+            disableRespawn(mob)
+            mob:addListener('DESPAWN', 'ZXI_NM_DISABLE', disableRespawn)
 
             if mob:isSpawned() then
                 DespawnMob(mob:getID())
