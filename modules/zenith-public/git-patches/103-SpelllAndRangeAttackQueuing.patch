@@ -123,7 +123,7 @@ index dcf8de99a0..8e498d506f 100644
 +        return false;
 +    }
 +
-     if (canAct() && !PChar->PRecastContainer->HasRecast(RECAST_MAGIC, static_cast<Recast>(spellid), 0s))
+     if (canAct() && !PChar->PRecastContainer->HasRecast(xi::RecastType::Magic, static_cast<xi::Recast>(spellid), 0s))
      {
          if (const auto PTarget = target.resolve<CBattleEntity>(); PTarget && PTarget->PAI->IsUntargetable())
 @@ -235,6 +256,25 @@ auto CPlayerController::Ability(EntityId target, const uint16 abilityid) -> bool
