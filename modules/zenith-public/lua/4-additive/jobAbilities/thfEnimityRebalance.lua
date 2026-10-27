@@ -9,16 +9,18 @@ local m = Module:new('a-j_thf_enmity_rebal')
 -----------------------------------
 -- Sneak Attack & Trick Attack Recast Reduction
 -----------------------------------
--- Reduces the recast time of Sneak Attack and Trick Attack
--- based on the number of merit points spent in Ambush
--- Each merit point reduces recast by 1 second
-local adjustRecast = function(player, ability)
-    local merits = player:getMerit(xi.merit.AMBUSH)
+-- Each Ambush merit upgrade takes 1 second off the Sneak Attack and Trick Attack recast
+-- (minimum 0 seconds).
+--
+-- player:getMerit() returns the upgrades times the merit's per-upgrade value, not the upgrade count.
+-- Ambush's value is 3 (data/merits.yaml); tests/thf_enmity_rebalance.lua fails if that changes.
+local ambushValue = 3
 
-    if merits > 0 then
-        -- Reduce recast timer by 1 second per merit point
-        -- Minimum recast is 0 seconds (instant)
-        ability:setRecast(math.max(0, ability:getRecast() - merits))
+local adjustRecast = function(player, ability)
+    local upgrades = math.floor(player:getMerit(xi.merit.AMBUSH) / ambushValue)
+
+    if upgrades > 0 then
+        ability:setRecast(math.max(0, ability:getRecast() - upgrades))
     end
 end
 

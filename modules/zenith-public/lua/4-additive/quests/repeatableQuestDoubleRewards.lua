@@ -1,7 +1,9 @@
 -----------------------------------
 -- Repeatable Quest Double Gil Rewards Module
 -- Doubles gil rewards for whitelisted repeatable quests
--- Limited to first 3 completions per day PER QUEST
+-- Limited to the first 3 completions of each quest per real (Earth) day.
+-- The count resets at JST midnight (JstMidnight()), the server's daily
+-- reset, not at Vana'diel midnight.
 --
 -- REQUIRES: C++ patch 108-addGil-module-hook.patch to be applied
 -- The patch enables the xi.player.onPlayerAddGil() hook function
@@ -182,13 +184,12 @@ local function getDailyCount(player, areaId, questId)
 end
 
 -----------------------------------
--- Helper: Increment and save daily count with midnight expiry
+-- Helper: Increment and save daily count, expiring at the next JST midnight
 -----------------------------------
 local function incrementDailyCount(player, areaId, questId)
     local currentCount = getDailyCount(player, areaId, questId)
     local newCount = currentCount + 1
-    local nextMidnight = getVanaMidnight(0)
-    player:setCharVar(getDailyVarName(areaId, questId), newCount, nextMidnight)
+    player:setCharVar(getDailyVarName(areaId, questId), newCount, JstMidnight())
     return newCount
 end
 

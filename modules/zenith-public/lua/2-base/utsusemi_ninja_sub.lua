@@ -1,6 +1,6 @@
 require('modules/module_utils')
 
-local m = Module:new('utsusemi_ninja_sub')
+local m = Module:new('b_utsusemi_ninja_sub')
 
 m:addOverride('xi.actions.spells.ninjutsu.utsusemi_ichi.onMagicCastingCheck', function(caster, target, spell)
     -- +1 s cast time when NIN is subjob
@@ -29,8 +29,16 @@ m:addOverride('xi.spells.enhancing.calculateNinjutsuPower', function(caster, tar
             caster:getMainJob() ~= xi.job.NIN
         then
             power = power - 1
-            if power == 2 then
+
+            -- Icon follows the new shadow count (same mapping as utils.shadowAbsorb: 4 or more share one icon)
+            if power >= 4 then
+                subPower = xi.effect.COPY_IMAGE_4
+            elseif power == 3 then
+                subPower = xi.effect.COPY_IMAGE_3
+            elseif power == 2 then
                 subPower = xi.effect.COPY_IMAGE_2
+            else
+                subPower = xi.effect.COPY_IMAGE
             end
         end
     end

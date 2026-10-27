@@ -32,7 +32,10 @@
 --     stays off widescan until the next normal load.
 --   * x, y, z are copies of the yaml `at` values and must match
 --     data/zones/<zone>/npcs.yaml. NPCs are looked up by id and the name is
---     checked, so a renumbered NPC is skipped with a log line instead of moved.
+--     checked. When the name does not match (LSB renumbers NPCs on retail
+--     updates), the zone's only NPC with that name is used and a line asks for
+--     the table to be updated; a name that is missing or not unique (the two
+--     RuLude_Gardens Explorer_Moogles) is skipped with a log line instead.
 --   * Explorer_Moogle has no `status`: whether it shows is up to
 --     xi.server.setExplorerMoogles() (EXPLORER_MOOGLE_LV), which runs inside
 --     Zone.onInitialize before this does. 17772773 (RuLude_Gardens) has no such
@@ -67,8 +70,8 @@ local contentNpcs =
     {
         [17723627] = { name = 'Macuillie',       tag = 'COP', x = -191.738, y = 11.001,  z =  138.656, status = xi.status.NORMAL }, -- Guild Point: Smithing
         [17723628] = { name = 'Andreas',         tag = 'COP', x = -189.282, y = 10.999,  z =  262.626, status = xi.status.NORMAL }, -- Guild Point: Woodworking
-        [17723851] = { name = 'Ore_Guzzler',     tag = 'SOA', x = -180.0,   y = 12.0,    z =  143.0,   status = xi.status.NORMAL }, -- Crafter Point: Smithing
-        [17723850] = { name = 'Luren',           tag = 'SOA', x = -171.71,  y = 12.0,    z =  258.7,   status = xi.status.NORMAL }, -- Crafter Point: Woodworking
+        [17723852] = { name = 'Ore_Guzzler',     tag = 'SOA', x = -180.0,   y = 12.0,    z =  143.0,   status = xi.status.NORMAL }, -- Crafter Point: Smithing
+        [17723851] = { name = 'Luren',           tag = 'SOA', x = -171.71,  y = 12.0,    z =  258.7,   status = xi.status.NORMAL }, -- Crafter Point: Woodworking
         [17723648] = { name = 'Explorer_Moogle', tag = false, x =  116.44,  y = -0.199,  z =   -8.459 },
     },
 
@@ -134,13 +137,37 @@ local contentNpcs =
     },
 }
 
-local function applyContentTags(npcs)
-    for npcId, entry in pairs(npcs) do
-        local npc = GetNPCByID(npcId)
+-- The NPC an entry means: the one at npcId when its name matches, otherwise (LSB
+-- renumbered it) the zone's only NPC with that name, otherwise nil
+local function findNpc(zone, npcId, name)
+    local npc = GetNPCByID(npcId)
 
-        if npc and npc:getName() ~= entry.name then
-            print(fmt('[NpcContentTags] NPC {} is {}, expected {}; skipped', npcId, npc:getName(), entry.name))
-        elseif npc and entry.tag and xi.pre(xi.expansion[entry.tag]) then
+    if npc and npc:getName() == name then
+        return npc
+    end
+
+    local matches = {}
+
+    for _, entity in ipairs(zone:queryEntitiesByName(name)) do
+        if entity:getObjType() == xi.objType.NPC then
+            table.insert(matches, entity)
+        end
+    end
+
+    if #matches == 1 then
+        print(fmt('[NpcContentTags] {} is NPC {} now, not {}; update the table', name, matches[1]:getID(), npcId))
+        return matches[1]
+    end
+
+    print(fmt('[NpcContentTags] NPC {} is not {} and {} NPCs have that name; skipped', npcId, name, #matches))
+    return nil
+end
+
+local function applyContentTags(npcs, zone)
+    for npcId, entry in pairs(npcs) do
+        local npc = findNpc(zone, npcId, entry.name)
+
+        if npc and entry.tag and xi.pre(xi.expansion[entry.tag]) then
             -- The tag the SQL set is gated off: hide it the way the engine hides gated NPCs
             npc:setStatus(xi.status.DISAPPEAR)
             npc:setPos(0, 0, 0)
@@ -164,7 +191,7 @@ for zoneName, npcs in pairs(contentNpcs) do
     m:addOverride(string.format('xi.zones.%s.Zone.onInitialize', zoneName), function(zone)
         super(zone)
 
-        applyContentTags(npcs)
+        applyContentTags(npcs, zone)
     end)
 end
 
