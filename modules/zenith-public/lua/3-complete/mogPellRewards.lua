@@ -108,6 +108,7 @@ local rewardItems =
         { xi.item.SHELL_SCEPTER, 1 },
         { xi.item.GOBBIE_GAVEL, 1 },
         { xi.item.MELOMANE_MALLET, 1 },
+        { xi.item.KORRIGAN_BERET, 1 },
         { xi.item.DECAZOOM_MK_XI, 1 },
         { xi.item.ESCRITORIO, 1 },
         { xi.item.HARPSICHORD, 1 },
@@ -115,7 +116,7 @@ local rewardItems =
         { xi.item.SPINET, 1 },
         { xi.item.NANAA_MIHGO_STATUE, 1 },
         { xi.item.NANAA_MIHGO_STATUE_II, 1 },
-        -- { xi.item.LEAFKIN_BED, 1 }, -- Doesn't exist in DB
+        { xi.item.LEAFKIN_BED, 1 },
     },
 
     [xi.item.SILVER_MOG_PELL] =
