@@ -1,0 +1,62 @@
+-----------------------------------
+-- Unlocking a Myth era WS points (ZENITHDEV-259)
+-- Copy of LSB's modules/era/lua/globals/equipment/unlocking_a_myth.lua without its
+-- xi.pre(xi.expansion.ABYSSEA) condition: Zalsuhn and the Vigil weapons' latent need weapon skill points
+-- by Nyzul Isle floor progress again, from 16,000 at floor 0 to 250 at floor 100 (base: always 250).
+-- The quest progression and the latent itself are unchanged.
+-- Source: https://forum.square-enix.com/ffxi/threads/43135-Jul-8-2014-%28JST%29-Version-Update
+-----------------------------------
+require('modules/module_utils')
+-----------------------------------
+local m = Module:new('c_unlockingAMythWsPoints')
+local weaponList =
+{
+    'brave_blade',
+    'burning_fists',
+    'dancing_dagger',
+    'death_sickle',
+    'double_axe',
+    'elder_staff',
+    'inferno_claws',
+    'killer_bow',
+    'mages_staff',
+    'main_gauche',
+    'quicksilver',
+    'radiant_lance',
+    'sasuke_katana',
+    'scepter_staff',
+    'sturdy_axe',
+    'swordbreaker',
+    'vorpal_sword',
+    'werebuster',
+    'wightslayer',
+    'windslicer',
+}
+
+m:addOverride('xi.equipment.vigilWeaponRequiredWsPoints', function(player)
+    local nyzulFloorProgress = player:getCharVar('NyzulFloorProgress')
+    if nyzulFloorProgress == 100 then
+        return 250
+    elseif nyzulFloorProgress >= 80 then
+        return 500 + 20 * (99 - nyzulFloorProgress)
+    elseif nyzulFloorProgress >= 60 then
+        return 1000 + 40 * (79 - nyzulFloorProgress)
+    elseif nyzulFloorProgress >= 40 then
+        return 2000 + 80 * (59 - nyzulFloorProgress)
+    elseif nyzulFloorProgress >= 20 then
+        return 4000 + 160 * (39 - nyzulFloorProgress)
+    elseif nyzulFloorProgress > 0 then
+        return 8000 + 320 * (19 - nyzulFloorProgress)
+    else
+        return 16000
+    end
+end)
+
+for _, weaponName in ipairs(weaponList) do
+    xi.module.ensureTable(fmt('xi.items.{}', weaponName))
+    m:addOverride(fmt('xi.items.{}.onItemEquip', weaponName), function(target, item)
+        item:setWeaponskillPointsNeeded(xi.equipment.vigilWeaponRequiredWsPoints(target))
+    end)
+end
+
+return m
