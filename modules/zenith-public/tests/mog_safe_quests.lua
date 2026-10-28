@@ -19,7 +19,8 @@ describe('Zenith Mog Safe quests', function()
 
         -- Everything else the offer needs: in the home nation Mog House, enough fame, quests before done
         stub('xi.moghouse.inMogHouseInHomeNation', true)
-        player:setFame(player:getNation(), 1000)
+        -- the top rank's points from the table in use, so this holds with era_fame_rank_points.lua too
+        player:setFame(player:getNation(), xi.data.fame.rankPoints[9])
         assert(player:getFameLevel(player:getNation()) >= 7, 'precondition: fame level 7 for Moogles in the Wild')
         player:completeQuest(xi.questLog.OTHER_AREAS, xi.quest.id.otherAreas.GIVE_A_MOOGLE_A_BREAK)
         player:completeQuest(xi.questLog.OTHER_AREAS, xi.quest.id.otherAreas.THE_MOOGLE_PICNIC)
