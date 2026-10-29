@@ -1,0 +1,8 @@
+# Weapon skill changes for Zenith (merged over data/weapon_skills.yaml).
+# Only this line of LSB's pre-SoA modules/era/data/weapon_skills.yaml is used: its other changes
+# (starter weapon skill levels, 15 yalm ranged weapon skills, RDM's Red Lotus/Seraph/Vorpal Blade) are not wanted.
+
+weapon_skills:
+  # PUP gained Asuran Fists in the March 2013 update (ZENITHDEV-264).
+  # https://forum.square-enix.com/ffxi/threads/31310
+  asuran_fists: {jobs: [mnk]}
